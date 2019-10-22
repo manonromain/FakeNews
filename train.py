@@ -13,7 +13,7 @@ def train(dataset="twitter15"):
     dataset = data_twitter(dataset)
     data_loader = torch_geometric.data.DataLoader(dataset, batch_size=BATCH_SIZE)
 
-    model = Net(1, 4)
+    model = Net(4794, 4)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
     model.train()
     for epoch in range(200):

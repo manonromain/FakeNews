@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch_geometric
 
-from text_preprocessing import preprocess_tweet
+from text_preprocessing import preprocess_tweets
 
 DATA_DIR = "rumor_detection_acl2017"
 
@@ -58,21 +58,25 @@ def data_twitter(dataset="twitter15"):
             label, tweet_id = line.split(":")
             labels[int(tweet_id)] = label
 
-    text_features = {}
+    tweet_dict = {}
     with open(os.path.join(dataset_dir, "source_tweets.txt")) as text_file:
         for line in text_file.readlines():
             tweet_id, text = line.split("\t")
             try:
-                text_features[int(tweet_id)] = preprocess_tweet(text)
+                tweet_dict[int(tweet_id)] = text
             except NotImplementedError:
                 print("Text features will not be used")
                 break
+
+    text_features = preprocess_tweets(tweet_dict)
+    print("Tweets tf-idfed in {:3f}s".format(time.time() - starttime))
 
     trees_to_parse = glob.glob(os.path.join(dataset_dir, "tree", "*.txt"))
 
     dataset = []
 
-    n_text_features = (text_features.values()[0].shape[0] if text_features else 0)  # FIXME + text_features
+    #
+    n_text_features = (text_features[int(tweet_id)].shape[0] if text_features else 0)  # FIXME + text_features
     for tree_file_name in trees_to_parse:
         edges = []
         x = []
