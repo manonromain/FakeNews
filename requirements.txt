@@ -3,3 +3,4 @@ torch
 torch_sparse
 torch_scatter
 torch_cluster
+tensorboard

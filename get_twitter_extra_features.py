@@ -26,9 +26,9 @@ for path_folder in paths_folder:
     
 list_user_post = [] #will contain all tuples (user, post)
 
-for file in files_tree:
+for file_name in files_tree:
     list_user_post_file = []
-    with open(file) as f:
+    with open(file_name) as f:
         for line in f:
             line_split = line.split("'")
             list_user_post_file.append((line_split[1], line_split[3]))
