@@ -44,16 +44,17 @@ class DatasetBuilder:
 
         tweet_texts = {}
 
-        # with open(os.path.join(DATA_DIR, "tweet_features.txt")) as text_file:
-        #     text_file.readline() #first line contains column names 
-        #     for line in text_file.readlines():
-        #         tweet_id, text, _ = line.split(";")
-        #         tweet_texts[int(tweet_id)] = text
+        with open(os.path.join(DATA_DIR, "tweet_features.txt")) as text_file:
+            text_file.readline() #first line contains column names 
+            for line in text_file.readlines():
+                tweet_id, text, _ = line.split(";")
+                tweet_texts[int(tweet_id)] = text
 
         with open(os.path.join(self.dataset_dir, "source_tweets.txt")) as text_file:
             for line in text_file.readlines():
                 tweet_id, text = line.split("\t")
                 tweet_texts[int(tweet_id)] = text
+
     
         return tweet_texts
 
@@ -63,6 +64,7 @@ class DatasetBuilder:
         labels = self.load_labels()
         tweet_texts = self.load_tweet_texts()
 
+        print('running tf-idf')
         text_features = preprocess_tweets(tweet_texts)
         print("Tweets tf-idfed in {:3f}s".format(time.time() - starttime))
 
