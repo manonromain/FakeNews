@@ -31,10 +31,11 @@ def train(dataset="twitter15"):
     model.eval()
     correct = 0
     n_samples = 0
-    for batch in data_loader:
-        _, pred = model(batch).max(dim=1)
-        correct += float(pred.eq(batch.y).sum().item())
-        n_samples += len(batch.y)
+    with torch.no_grad():
+        for batch in data_loader:
+            _, pred = model(batch).max(dim=1)
+            correct += float(pred.eq(batch.y).sum().item())
+            n_samples += len(batch.y)
     acc = correct / n_samples
     print('Accuracy: {:.4f}'.format(acc))
     print('Correct: {}'.format(correct))

@@ -9,7 +9,7 @@ def parse_edge_line(line):
     tweet_in, tweet_out = int(orig_list[3]), int(dest_list[3])
     user_in, user_out = int(orig_list[1]), int(dest_list[1])
     time_in, time_out = float(orig_list[5]), float(dest_list[5])
-    return tweet_in, tweet_out, user_in, user_out, time_in, time_out
+    return tweet_in, tweet_out, user_in, time_in, time_out
 
 
 def one_hot_label(label):
