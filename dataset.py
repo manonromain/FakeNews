@@ -71,7 +71,6 @@ class DatasetBuilder:
         dataset = []
 
         n_text_features = len(list(text_features.values())[0])
-        # n_text_features = (text_features[int(tweet_id)].shape[0] if text_features else 0)  # FIXME + text_features
         for tree_file_name in trees_to_parse:
             edges = []
             x = []
@@ -116,9 +115,6 @@ class DatasetBuilder:
             y = torch.tensor(to_label(label))
             edge_index = torch.tensor(np.array(edges)).t().contiguous()  # Why?
             x = torch.tensor(x, dtype=torch.float32)
-            # print(x.shape, edge_index.shape)
-            # print(x)
-            # print("Number of nodes", count)
             dataset.append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
         print("Dataset loaded in ", time.time() - starttime, "s")
         return dataset
