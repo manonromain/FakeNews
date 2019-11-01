@@ -1,1 +1,7 @@
 rumor_detection_acl2017/
+old_scripts/
+.ipynb_checkpoints/
+.vscode/
+__pycache__/
+credentials.txt
+

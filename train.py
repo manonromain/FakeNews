@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric
 import torch_geometric.nn as pyg_nn
@@ -48,19 +49,20 @@ class Net(torch.nn.Module):
         self.conv2 = GCNConv(16, 32)
         self.conv3 = GCNConv(32, 64)
         self.conv4 = GCNConv(64, num_classes)
+        self.dropout = 0.1
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
         x = self.conv1(x, edge_index)
         x = F.relu(x)
-        x = F.dropout(x, training=self.training)
+        x = nn.Dropout(self.dropout)(x)
         x = self.conv2(x, edge_index)
         x = F.relu(x)
-        x = F.dropout(x, training=self.training)
+        x = nn.Dropout(self.dropout)(x)
         x = self.conv3(x, edge_index)
         x = F.relu(x)
-        x = F.dropout(x, training=self.training)
+        x = nn.Dropout(self.dropout)(x)
         x = self.conv4(x, edge_index)
 
         x = pyg_nn.global_max_pool(x, batch)
