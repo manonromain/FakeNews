@@ -16,10 +16,10 @@ def parse_edge_line(line):
     orig_list = orig.split("'")
     dest_list = dest.split("'")
 
-    orig = [int(orig_list[3]), float(orig_list[5])]
-    dest = [int(dest_list[3]), float(dest_list[5])]
-    # print(orig, dest)
-    return orig, dest
+    tweet_in, tweet_out = int(orig_list[3]), int(dest_list[3])
+    user_in, user_out = int(orig_list[1]), int(dest_list[1])
+    time_in, time_out = float(orig_list[5]), float(dest_list[5])
+    return tweet_in, tweet_out, user_in, time_in, time_out
 
 
 def one_hot_label(label):
@@ -90,36 +90,36 @@ def data_twitter(dataset="twitter15"):
             for line in tree_file.readlines():
                 if "ROOT" in line:
                     continue
-                orig, dest = parse_edge_line(line)
+                tweet_in, tweet_out, user_in, time_in, time_out = parse_edge_line(line)
 
                 # Add orig if unseen
-                if orig[0] not in tweet_id_to_uid:
-                    tweet_id_to_uid[orig[0]] = count
-                    if orig[0] in text_features:
-                        text_ft = text_features[orig[0]]
+                if tweet_in not in tweet_id_to_uid:
+                    tweet_id_to_uid[tweet_in] = count
+                    if tweet_in in text_features:
+                        text_ft = text_features[tweet_in]
                     else:
                         text_ft = np.zeros(n_text_features)
-                    features = np.append(text_ft, orig[1])
+                    features = np.append(text_ft, time_in)
                     x.append(features)
 
                     count += 1
                 # Add dest if unseen
-                if dest[0] not in tweet_id_to_uid:
-                    tweet_id_to_uid[dest[0]] = count
-                    if dest[0] in text_features:
-                        text_ft = text_features[dest[0]]
+                if tweet_out not in tweet_id_to_uid:
+                    tweet_id_to_uid[tweet_out] = count
+                    if tweet_out in text_features:
+                        text_ft = text_features[tweet_out]
                     else:
                         text_ft = np.zeros(n_text_features)
-                    features = np.append(text_ft, dest[1])
+                    features = np.append(text_ft, time_out)
                     x.append(features)
 
                     count += 1
 
                 # Add edge
-                edges.append(np.array([tweet_id_to_uid[orig[0]], tweet_id_to_uid[dest[0]]]))
+                edges.append(np.array([tweet_id_to_uid[tweet_in], tweet_id_to_uid[tweet_out]]))
 
         y = torch.tensor(to_label(label))
-        edge_index = torch.tensor(np.array(edges)).t().contiguous()
+        edge_index = torch.tensor(np.array(edges)).t().contiguous()  # Why?
         x = torch.tensor(x, dtype=torch.float32)
         # print(x.shape, edge_index.shape)
         # print(x)
