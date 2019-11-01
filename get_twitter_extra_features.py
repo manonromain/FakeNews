@@ -128,3 +128,76 @@ def get_users_content_batch(start_id = 0, end_id = len(all_users)):
 
 get_users_content_batch()
 
+
+# Fix files
+
+print("Some lines were cut in several parts, fixing files...")
+
+import os
+
+with open('rumor_detection_acl2017/user_features.txt','r') as f:
+    with open('rumor_detection_acl2017/user_features_fixed.txt','w') as f2:
+        n_features = len(f.readline().split(';'))
+
+        while 1:
+            line = f.readline()
+            if not line:
+                break
+
+            nb_features_line = len(line.split(';'))
+            if nb_features_line == n_features:
+                f2.write(line)
+            else:
+                new_line = line
+                while nb_features_line<n_features:
+                    new_line = new_line[:-1]
+                    line = f.readline()
+                    new_line += line
+                    nb_features_line = len(new_line.split(';'))
+                assert nb_features_line == 13
+
+                f2.write(new_line)
+
+os.remove("rumor_detection_acl2017/user_features.txt")
+os.rename("rumor_detection_acl2017/user_features_fixed.txt",
+          "rumor_detection_acl2017/user_features.txt")
+
+
+with open('rumor_detection_acl2017/tweet_features.txt','r') as f:
+    with open('rumor_detection_acl2017/tweet_features_fixed.txt','w') as f2:
+        n_features = len(f.readline().split(';'))
+
+        while 1:
+            line = f.readline()
+            if not line:
+                break
+
+            nb_features_line = len(line.split(';'))
+            if nb_features_line == n_features:
+                f2.write(line)
+            else:
+                new_line = line
+                while nb_features_line<n_features:
+                    new_line = new_line[:-1]
+                    line = f.readline()
+                    new_line += line
+                    nb_features_line = len(new_line.split(';'))
+                assert nb_features_line == n_features
+
+                f2.write(new_line)
+
+os.remove("rumor_detection_acl2017/tweet_features.txt")
+os.rename("rumor_detection_acl2017/tweet_features_fixed.txt",
+          "rumor_detection_acl2017/tweet_features.txt")
+
+
+print("Checking everything is ok...")
+with open('rumor_detection_acl2017/user_features.txt','r') as f:
+    for line in f:
+        assert len(line.split(';')) == 13
+
+with open('rumor_detection_acl2017/tweet_features.txt','r') as f:
+    for line in f:
+        assert len(line.split(';')) == 3
+
+print("Done.")
