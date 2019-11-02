@@ -122,9 +122,9 @@ class DatasetBuilder:
             tweet_features: dict[tweet_id -> dict[name_feature -> feature]]
         Returns:
             defaultdict[tweet_id -> np.array(n_dim)]
-        
+
         """
-        
+
         #TODO: more preprocessing, this is just a beginning.
         if 'created_at' in self.tweet_feature_names:
             for tweet_id in tweet_features.keys():
