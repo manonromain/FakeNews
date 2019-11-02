@@ -1,4 +1,3 @@
-import glob
 import os
 import random
 import time
@@ -41,13 +40,13 @@ class DatasetBuilder:
         user_features = self.load_user_features()
         preprocessed_user_fts = self.preprocess_user_features(user_features)
 
-        trees_to_parse = glob.glob(os.path.join(self.dataset_dir, "tree", "*.txt"))
+        trees_to_parse = utils.get_tree_file_names(self.dataset_dir)
 
         dataset = []
 
         for tree_file_name in trees_to_parse:
 
-            root_tweet_id = int(os.path.splitext(os.path.basename(tree_file_name))[0])
+            root_tweet_id = utils.get_root_id()
             label = labels[root_tweet_id]
 
             if (not self.only_binary) or (label in ['false', 'true']):
