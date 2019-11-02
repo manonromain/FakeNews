@@ -1,6 +1,13 @@
 import os
 from collections import defaultdict
-import subprocess
+
+"""
+USAGE:
+In the directory where 'rumor_detection_acl2017' is located, execute the following commands:
+$ python train_val_test_split.py
+$ bash script_twitter15_.sh
+$ bash script_twitter16_.sh
+"""
 
 dumps_dir = "rumor_detection_acl2017"
 
