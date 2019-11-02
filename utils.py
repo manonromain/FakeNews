@@ -1,5 +1,5 @@
 import numpy as np
-
+from datetime import datetime, timedelta
 
 def parse_edge_line(line):
     orig, dest = line.split("->")
@@ -34,5 +34,6 @@ def to_label(label):
         return np.array([3])
 
 
-def from_date_text_to_seconds(datestr):
-    return NotImplementedError
+def from_date_text_to_timestamp(datestr):
+    year, month, day = map(int, datestr.split()[0].split("-"))
+    return (datetime(year, month, day) - datetime(1970, 1, 1)) / timedelta(days=1)

@@ -15,11 +15,12 @@ from dataset import DatasetBuilder
 def train(dataset, args):
 
     # Loading dataset
-    dataset = DatasetBuilder(dataset).create_dataset()
+    dataset_builder = DatasetBuilder(dataset)
+    dataset = dataset_builder.create_dataset()
     data_loader = torch_geometric.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Setting up model
-    model = FirstNet(101, 4)
+    model = FirstNet(dataset_builder.number_of_features, 4)
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
