@@ -4,4 +4,7 @@ old_scripts/
 .vscode/
 __pycache__/
 credentials.txt
-
+logs/
+checkpoints/
+.DS_Store
+.idea
