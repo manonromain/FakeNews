@@ -9,7 +9,7 @@ def parse_edge_line(line):
     tweet_in, tweet_out = int(orig_list[3]), int(dest_list[3])
     user_in, user_out = int(orig_list[1]), int(dest_list[1])
     time_in, time_out = float(orig_list[5]), float(dest_list[5])
-    return tweet_in, tweet_out, user_in, time_in, time_out
+    return tweet_in, tweet_out, user_in, user_out, time_in, time_out
 
 
 def one_hot_label(label):
@@ -24,11 +24,15 @@ def one_hot_label(label):
 
 
 def to_label(label):
-    if label == "non-rumor":
-        return np.array([0])
     if label == "false":
-        return np.array([1])
+        return np.array([0])
     if label == "true":
+        return np.array([1])
+    if label == "non-rumor":
         return np.array([2])
     if label == "unverified":
         return np.array([3])
+
+
+def from_date_text_to_seconds(datestr):
+    return NotImplementedError

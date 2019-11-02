@@ -7,7 +7,7 @@ from torch_geometric.nn import GCNConv
 
 class FirstNet(torch.nn.Module):
     def __init__(self, num_node_features, num_classes):
-        super(Net, self).__init__()
+        super(FirstNet, self).__init__()
         self.conv1 = GCNConv(num_node_features, 16)
         self.conv2 = GCNConv(16, 32)
         self.conv3 = GCNConv(32, 64)

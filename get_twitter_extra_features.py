@@ -137,7 +137,9 @@ import os
 
 with open('rumor_detection_acl2017/user_features.txt','r') as f:
     with open('rumor_detection_acl2017/user_features_fixed.txt','w') as f2:
-        n_features = len(f.readline().split(';'))
+        first_line = f.readline()
+        n_features = len(first_line.split(';'))
+        f2.write(first_line)
 
         while 1:
             line = f.readline()
@@ -165,7 +167,9 @@ os.rename("rumor_detection_acl2017/user_features_fixed.txt",
 
 with open('rumor_detection_acl2017/tweet_features.txt','r') as f:
     with open('rumor_detection_acl2017/tweet_features_fixed.txt','w') as f2:
-        n_features = len(f.readline().split(';'))
+        first_line = f.readline()
+        n_features = len(first_line.split(';'))
+        f2.write(first_line)
 
         while 1:
             line = f.readline()
