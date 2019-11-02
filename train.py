@@ -8,7 +8,7 @@ import torch_geometric.nn as pyg_nn
 from torch_geometric.nn import GCNConv
 from torch.utils.tensorboard import SummaryWriter
 
-from models import FirstNet
+from models import FirstNet, GNNStack
 from dataset import DatasetBuilder
 
 
@@ -19,7 +19,8 @@ def train(dataset, args):
     data_loader = torch_geometric.data.DataLoader(dataset, batch_size=args.batch_size)
     
     # Setting up model
-    model = FirstNet(101, 4)
+    # model = FirstNet(101, 2)
+    model = GNNStack(101, 64, 2, args)
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
@@ -97,7 +98,13 @@ if __name__ == "__main__":
                     help='learning rate')
     parser.add_argument('--num_epochs', default=200,
                     help='Number of epochs')
-    parser.add_argument('--batch_size', default=32,
+    parser.add_argument('--num_layers', default=2, type=int,
+                    help='Number of layers')
+    parser.add_argument('--dropout', default=0.2, 
+                    help='Model type for GNNStack')
+    parser.add_argument('--model_type', default="GAT", 
+                    help='Model type for GNNStack')
+    parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch_size')
     parser.add_argument('--exp_name', default="default", 
                     help="Name of experiment - different names will log in different tfboards and restore different models")
