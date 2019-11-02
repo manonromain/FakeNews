@@ -18,7 +18,7 @@ def train(dataset, args):
     dataset_builder = DatasetBuilder(dataset)
     dataset = dataset_builder.create_dataset()
     data_loader = torch_geometric.data.DataLoader(dataset, batch_size=args.batch_size)
-    
+
     # Setting up model
     model = FirstNet(dataset_builder.number_of_features, 4)
 
@@ -29,7 +29,7 @@ def train(dataset, args):
     train_writer = SummaryWriter(os.path.join(log_dir, "train"))
     val_writer = SummaryWriter(os.path.join(log_dir, "val"))
     test_writer = SummaryWriter(os.path.join(log_dir, "test"))
- 
+
     # Checkpoints
     checkpoint_dir = os.path.join("checkpoints", args.exp_name)
     checkpoint_path = os.path.join(checkpoint_dir, "model.pt")
@@ -63,7 +63,7 @@ def train(dataset, args):
             # TFBoard logging
             train_writer.add_scalar("loss", loss.mean(), global_step)
             global_step += 1
-        
+
         # Saving model at the end of each epoch
         checkpoint = {
             "epoch": epoch,
@@ -92,7 +92,7 @@ def train(dataset, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train the graph network.')
-    parser.add_argument('dataset', choices=["twitter15", "twitter16"],  
+    parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
     parser.add_argument('--lr', default=0.01,
                     help='learning rate')
@@ -100,13 +100,13 @@ if __name__ == "__main__":
                     help='Number of epochs')
     parser.add_argument('--num_layers', default=2, type=int,
                     help='Number of layers')
-    parser.add_argument('--dropout', default=0.2, 
+    parser.add_argument('--dropout', default=0.2,
                     help='Model type for GNNStack')
-    parser.add_argument('--model_type', default="GAT", 
+    parser.add_argument('--model_type', default="GAT",
                     help='Model type for GNNStack')
     parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch_size')
-    parser.add_argument('--exp_name', default="default", 
+    parser.add_argument('--exp_name', default="default",
                     help="Name of experiment - different names will log in different tfboards and restore different models")
     args = parser.parse_args()
     train(args.dataset, args)

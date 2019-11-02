@@ -180,7 +180,7 @@ class DatasetBuilder:
                  edge_index: Tensor(2 * E))
         """
 
-        def aggromerate_features(node_tweet_fts, node_user_fts):
+        def agglomerate_features(node_tweet_fts, node_user_fts):
             return np.concatenate([node_tweet_fts, node_user_fts])
 
             
@@ -193,7 +193,7 @@ class DatasetBuilder:
         root_tweet_id = int(os.path.splitext(os.path.basename(tree_file_name))[0])
         label = labels[root_tweet_id]
 
-        self.number_of_features = len(aggromerate_features(tweet_fts[-1], user_fts[-1]))
+        self.number_of_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
 
         with open(tree_file_name, "rt") as tree_file:
             for line in tree_file.readlines():
@@ -204,14 +204,14 @@ class DatasetBuilder:
                 # Add orig if unseen
                 if tweet_in not in tweet_id_to_count:
                     tweet_id_to_count[tweet_in] = count
-                    features_node = aggromerate_features(tweet_fts[tweet_in], user_fts[user_in])
+                    features_node = agglomerate_features(tweet_fts[tweet_in], user_fts[user_in])
                     x.append(features_node)
                     count += 1
                 
                 # Add dest if unseen
                 if tweet_out not in tweet_id_to_count:
                     tweet_id_to_count[tweet_out] = count
-                    features_node = aggromerate_features(tweet_fts[tweet_out], user_fts[user_out])
+                    features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
                     x.append(features_node)
                     count += 1
 
