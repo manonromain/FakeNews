@@ -41,7 +41,7 @@ class DatasetBuilder:
     def create_dataset(self, dataset_type="graph"):
         """
         Args:
-            dataset_type:str. Has to be "graph" or "sequential"
+            dataset_type:str. Has to be "graph", "sequential" or "raw"
         Returns:
             dict with keys "train", "val", "test":
                 If dataset_type is "graph" contains list of
@@ -49,8 +49,8 @@ class DatasetBuilder:
                 If dataset_type is "sequential" contains list of
                     (sequential_data, y)
         """
-        if dataset_type not in ["graph", "sequential"]:
-            raise ValueError("supported dataset types are: 'graph', 'sequential'")
+        if dataset_type not in ["graph", "sequential", "raw"]:
+            raise ValueError("Supported dataset types are: 'graph', 'sequential', 'raw'.")
 
         start_time = time.time()
 
@@ -110,6 +110,8 @@ class DatasetBuilder:
                     dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                     # print(sequential_data.mean(dim=0))
                     # print("label was {}".format(label))
+                elif dataset_type == "raw":
+                    dataset[ids_to_dataset[news_id]].append([[news_id] + edge + list(node_features[edge[1]]) for edge in edges])
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -379,7 +381,9 @@ class DatasetBuilder:
                     # Add edge
                     edges.append([tweet_id_to_count[tweet_in],
                                   tweet_id_to_count[tweet_out],
-                                  time_out])
+                                  time_out,
+                                  user_in,
+                                  user_out])
 
         return x, edges
 
