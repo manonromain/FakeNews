@@ -10,7 +10,7 @@ def preprocess_tweets(tweets):
         text_tf: dict[int -> np.array]
     """
 
-    vectorizer = TfidfVectorizer(max_features = 100)
+    vectorizer = TfidfVectorizer(max_features=100)
     keys = tweets.keys()
     list_tweets = [tweets[key] for key in keys]
     X = vectorizer.fit_transform(list_tweets)

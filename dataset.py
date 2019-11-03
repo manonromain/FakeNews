@@ -41,7 +41,7 @@ class DatasetBuilder:
     def create_dataset(self, dataset_type="graph"):
         """
         Args:
-            dataset_type:str. Has to be "graph" or "sequential"
+            dataset_type:str. Has to be "graph", "sequential" or "raw"
         Returns:
             dict with keys "train", "val", "test":
                 If dataset_type is "graph" contains list of
@@ -49,8 +49,8 @@ class DatasetBuilder:
                 If dataset_type is "sequential" contains list of
                     (sequential_data, y)
         """
-        if dataset_type not in ["graph", "sequential"]:
-            raise ValueError("supported dataset types are: 'graph', 'sequential'")
+        if dataset_type not in ["graph", "sequential", "raw"]:
+            raise ValueError("Supported dataset types are: 'graph', 'sequential', 'raw'.")
 
         start_time = time.time()
 
@@ -63,11 +63,11 @@ class DatasetBuilder:
 
         news_ids_to_consider = list(labels.keys())
         if self.only_binary:
-            news_ids_to_consider = [news_id for news_id in news_ids_to_consider 
+            news_ids_to_consider = [news_id for news_id in news_ids_to_consider
                                     if labels[news_id] in ['false', 'true']]
 
-        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size = 0.1, random_state = 42)
-        train_ids, test_ids = train_test_split(train_ids, test_size = 0.25, random_state = 68)
+        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size=0.1, random_state=42)
+        train_ids, test_ids = train_test_split(train_ids, test_size=0.25, random_state=68)
         print(f"Len train/val/test {len(train_ids)} {len(val_ids)} {len(test_ids)}")
 
         user_ids_in_train, tweet_ids_in_train = \
@@ -79,11 +79,11 @@ class DatasetBuilder:
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train)
 
-        ids_to_dataset = {news_id:'train' for news_id in train_ids}
-        ids_to_dataset.update({news_id:'val' for news_id in val_ids})
-        ids_to_dataset.update({news_id:'test' for news_id in test_ids})
+        ids_to_dataset = {news_id: 'train' for news_id in train_ids}
+        ids_to_dataset.update({news_id: 'val' for news_id in val_ids})
+        ids_to_dataset.update({news_id: 'test' for news_id in test_ids})
 
-        dataset = {'train':[], 'val':[], 'test':[]}
+        dataset = {'train': [], 'val': [], 'test': []}
 
         for tree_file_name in trees_to_parse:
 
@@ -108,10 +108,12 @@ class DatasetBuilder:
                     ordered_edges = sorted(edges, key=lambda x: x[2])
                     sequential_data = torch.tensor([node_features[edge[1]] for edge in ordered_edges])
                     dataset[ids_to_dataset[news_id]].append([sequential_data, y])
-                    print(sequential_data.mean(dim=0))
-                    print("label was {}".format(label))
+                    # print(sequential_data.mean(dim=0))
+                    # print("label was {}".format(label))
+                elif dataset_type == "raw":
+                    dataset[ids_to_dataset[news_id]].append([[news_id] + edge + list(node_features[edge[1]]) for edge in edges])
 
-        print(f"Dataset loaded in {time.time() - start_time}s")
+        print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
         return dataset
 
@@ -206,7 +208,7 @@ class DatasetBuilder:
         Returns:
             defaultdict[user_id -> np.array(n_dim)]
         """
-        
+
         # Available variables
         # id;
         # created_at;
@@ -237,18 +239,18 @@ class DatasetBuilder:
 
         for user_id, features in user_features.items():
 
-            new_features = {} # will contain the processed features of current user
+            new_features = {}  # will contain the processed features of current user
 
             if "created_at" in features:
                 new_features['created_at'] = \
                     utils.from_date_text_to_timestamp(features['created_at'])
 
             integer_features = [
-                "favourites_count", 
-                "followers_count", 
-                "friends_count", 
-                "listed_count", 
-                "statuses_count", 
+                "favourites_count",
+                "followers_count",
+                "friends_count",
+                "listed_count",
+                "statuses_count",
             ]
             #print(features.keys())
             for int_feature in integer_features:
@@ -262,31 +264,30 @@ class DatasetBuilder:
 
             user_features[user_id] = new_features
 
-        user_features_train_only = {key:val for key, val in user_features.items() if key in user_ids_in_train}
+        user_features_train_only = {key: val for key, val in user_features.items() if key in user_ids_in_train}
 
         # Standardizing
         for ft in [
             "created_at",
-            "favourites_count", 
-            "followers_count", 
-            "friends_count", 
-            "listed_count", 
+            "favourites_count",
+            "followers_count",
+            "friends_count",
+            "listed_count",
             "statuses_count",
-            "len_name", 
+            "len_name",
             "len_screen_name"
         ]:
             scaler = StandardScaler().fit(
                 np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
             )
 
-            #faster to do this way as we don't have to convert to np arrays
-            mean, std = scaler.mean_[0], scaler.var_[0]**(1/2) 
+            # faster to do this way as we don't have to convert to np arrays
+            mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
             for key in user_features_train_only.keys():
                 user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
 
             for key in user_features.keys():
                 user_features[key][ft] = (user_features[key][ft] - mean) / std
-            
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
@@ -304,14 +305,12 @@ class DatasetBuilder:
 
         def default_user_features():
             """ Return np array of default features sorted by alphabetic order """
-            return np.array([val for key, val in 
-                            sorted(dict_defaults.items(), key=lambda x: x[0])])
-
-        np_user_features = {key: np.array(list(val.values())) for key, val in 
-                            sorted(user_features.items(), key=lambda x: x[0])}
+            return np.array([val for key, val in
+                             sorted(dict_defaults.items(), key=lambda x: x[0])])
+        # "user features: key=uid, value=dict[ftname:valueft]"
+        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for key, value in user_features.items()}
 
         return defaultdict(default_user_features, np_user_features)
-
 
     def get_user_and_tweet_ids_in_train(self, trees_to_parse, train_ids):
         """ Returns sets of all the user ids and tweet ids that appear in train set """
@@ -331,7 +330,6 @@ class DatasetBuilder:
                         tweet_ids_in_train.add(tweet_in)
                         tweet_ids_in_train.add(tweet_out)
         return user_ids_in_train, tweet_ids_in_train
-            
 
     def build_tree(self, tree_file_name, tweet_fts, user_fts):
         """ Parses the file to build a tree, adding all the features.
@@ -382,14 +380,17 @@ class DatasetBuilder:
                     # Add edge
                     edges.append([tweet_id_to_count[tweet_in],
                                   tweet_id_to_count[tweet_out],
-                                  time_out])
+                                  time_out,
+                                  user_in,
+                                  user_out])
 
         return x, edges
 
 
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
-    data_builder.create_dataset(dataset_type="sequential")
-    print()
+    dataset = data_builder.create_dataset(dataset_type="sequential")
+    # import pdb;
+    # pdb.set_trace()
     data_builder = DatasetBuilder("twitter16")
     data_builder.create_dataset(dataset_type="graph")
