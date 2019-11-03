@@ -79,6 +79,8 @@ class DatasetBuilder:
                     ordered_edges = sorted(edges, key=lambda x: x[2])
                     sequential_data = torch.tensor([node_features[edge[1]] for edge in ordered_edges])
                     dataset.append([sequential_data, y])
+                    print(sequential_data.mean(dim=0))
+                    print("label was {}".format(label))
 
         print(f"Dataset loaded in {time.time() - start_time}s")
 
@@ -155,6 +157,7 @@ class DatasetBuilder:
                 tweet_features[tweet_id]['created_at'] = \
                     utils.from_date_text_to_timestamp(tweet_features[tweet_id]['created_at'])
 
+
         # print('running tf-idf')
         # self.text_features = preprocess_tweets(self.tweet_texts)
         # self.n_text_features = len(list(self.text_features.values())[0])
@@ -177,15 +180,50 @@ class DatasetBuilder:
         """
 
         # TODO: more preprocessing, this is just a beginning.
-        if 'created_at' in self.user_feature_names:
-            for user_id in user_features.keys():
-                user_features[user_id]['created_at'] = \
+        count, created, followers, friends, statuses, verified = 0, 0, 0, 0, 0, 0
+
+        for user_id, features in user_features.items():
+            new_features = {}
+            if "created_at" in features:
+                new_features['created_at'] = \
                     utils.from_date_text_to_timestamp(user_features[user_id]['created_at'])
-
+                created += utils.from_date_text_to_timestamp(user_features[user_id]['created_at'])
+            if "followers_count" in features:
+                new_features['followers_count'] = int(features['followers_count'])
+                followers +=  int(features['followers_count'])
+            if "friends_count" in features:
+                new_features['friends_count'] = int(features['friends_count'])
+                friends += int(features['friends_count'])
+            if "statuses_count" in features:
+                new_features['statuses_count'] = int(features['statuses_count'])
+                statuses += int(features['statuses_count'])
+            if "verified" in features:
+                new_features['verified'] = 1 if features['verified'] == "True" else 0
+                verified += new_features['verified']
+            user_features[user_id] = new_features
+            count += 1
+        created /= count
+        followers /= count
+        friends /= count
+        statuses /= count
+        verified /= count
+        # id;
+        # created_at;
+        # description;
+        # favourites_count;
+        # followers_count;
+        # friends_count;
+        # geo_enabled;
+        # listed_count;
+        # location;
+        # name;
+        # screen_name;
+        # statuses_count;
+        # verified
         def default_user_features():
-            return np.array([utils.from_date_text_to_timestamp('2016-01-01 00:00:01')])
+            return np.array([created, followers, friends, statuses, verified])
 
-        new_user_features = {key: np.array([val['created_at']]) for key, val in user_features.items()}
+        new_user_features = {key: np.array(list(val.values())) for key, val in user_features.items()}
         return defaultdict(default_user_features, new_user_features)
 
     def build_tree(self, tree_file_name, tweet_fts, user_fts):
@@ -245,5 +283,5 @@ class DatasetBuilder:
 
 
 if __name__ == "__main__":
-    data_builder = DatasetBuilder("twitter15")
+    data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
     data_builder.create_dataset(dataset_type="sequential")
