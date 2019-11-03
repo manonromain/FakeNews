@@ -111,7 +111,8 @@ class DatasetBuilder:
                     # print(sequential_data.mean(dim=0))
                     # print("label was {}".format(label))
                 elif dataset_type == "raw":
-                    dataset[ids_to_dataset[news_id]].append([[news_id] + edge + list(node_features[edge[1]]) for edge in edges])
+                    dataset[ids_to_dataset[news_id]].append(
+                        [[label, news_id] + edge + list(node_features[edge[1]]) for edge in edges])
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -307,8 +308,10 @@ class DatasetBuilder:
             """ Return np array of default features sorted by alphabetic order """
             return np.array([val for key, val in
                              sorted(dict_defaults.items(), key=lambda x: x[0])])
-        # "user features: key=uid, value=dict[ftname:valueft]"
-        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for key, value in user_features.items()}
+
+        #  user features: key=uid, value=dict[ftname:valueft]
+        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for
+                            key, value in user_features.items()}
 
         return defaultdict(default_user_features, np_user_features)
 
