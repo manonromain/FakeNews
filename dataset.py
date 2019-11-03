@@ -11,6 +11,7 @@ import utils
 from text_preprocessing import preprocess_tweets
 
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 DATA_DIR = "rumor_detection_acl2017"
 
@@ -190,9 +191,11 @@ class DatasetBuilder:
         # print("Tweets tf-idfed in {:3f}s".format(time.time() - start_time))
 
         def default_tweet_features():
-            return np.array([utils.from_date_text_to_timestamp('2016-01-01 00:00:01')])
+            # return np.array([utils.from_date_text_to_timestamp('2016-01-01 00:00:01')])
+            return np.array([])
 
-        new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
+        # new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
+        new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
         return defaultdict(default_tweet_features, new_tweet_features)
 
     def preprocess_user_features(self, user_features, user_ids_in_train):
@@ -261,8 +264,29 @@ class DatasetBuilder:
 
         user_features_train_only = {key:val for key, val in user_features.items() if key in user_ids_in_train}
 
-        # TODO: standardization here?
-        # Fit on user_features_train_only and apply on user_features and user_features_train_only
+        # Standardizing
+        for ft in [
+            "created_at",
+            "favourites_count", 
+            "followers_count", 
+            "friends_count", 
+            "listed_count", 
+            "statuses_count",
+            "len_name", 
+            "len_screen_name"
+        ]:
+            scaler = StandardScaler().fit(
+                np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
+            )
+
+            #faster to do this way as we don't have to convert to np arrays
+            mean, std = scaler.mean_[0], scaler.var_[0]**(1/2) 
+            for key in user_features_train_only.keys():
+                user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
+
+            for key in user_features.keys():
+                user_features[key][ft] = (user_features[key][ft] - mean) / std
+            
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
