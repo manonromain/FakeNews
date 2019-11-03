@@ -307,9 +307,8 @@ class DatasetBuilder:
             """ Return np array of default features sorted by alphabetic order """
             return np.array([val for key, val in
                              sorted(dict_defaults.items(), key=lambda x: x[0])])
-
-        np_user_features = {key: np.array(list(val.values())) for key, val in
-                            sorted(user_features.items(), key=lambda x: x[0])}
+        # "user features: key=uid, value=dict[ftname:valueft]"
+        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for key, value in user_features.items()}
 
         return defaultdict(default_user_features, np_user_features)
 
