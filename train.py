@@ -15,12 +15,14 @@ from dataset import DatasetBuilder
 def train(dataset, args):
 
     # Loading dataset
-    dataset_builder = DatasetBuilder(dataset)
-    dataset = dataset_builder.create_dataset()
-    data_loader = torch_geometric.data.DataLoader(dataset, batch_size=args.batch_size)
+    dataset_builder = DatasetBuilder(dataset, only_binary=True)
+    datasets = dataset_builder.create_dataset()
+    train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size)
+    val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size)
+    test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size)
 
     # Setting up model
-    model = FirstNet(dataset_builder.number_of_features, 4)
+    model = FirstNet(dataset_builder.number_of_features, 2)
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
@@ -46,12 +48,14 @@ def train(dataset, args):
         print("Restoring previous model at epoch", epoch_ckp)
 
     # Training phase
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
         optimizer.zero_grad()
         epoch_loss = 0
-        for batch in data_loader:
+        for batch in train_data_loader:
+            #import pdb; pdb.set_trace()
             out = model(batch)
             loss = F.nll_loss(out, batch.y)
             epoch_loss += loss.sum().item()
@@ -68,29 +72,43 @@ def train(dataset, args):
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
-            "epoch_loss": epoch_loss / len(data_loader),
+            "epoch_loss": epoch_loss / len(train_data_loader),
             "global_step": global_step
         }
         torch.save(checkpoint, checkpoint_path)
-        print("epoch", epoch, "loss:", epoch_loss / len(data_loader))
+        print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
 
-        # Evaluation on the TRAINING SET 
+        # Evaluation on the validation set 
         model.eval()
         correct = 0
         n_samples = 0
         with torch.no_grad():
-            for batch in data_loader:
+            for batch in train_data_loader:
                 _, pred = model(batch).max(dim=1)
                 correct += float(pred.eq(batch.y).sum().item())
                 n_samples += len(batch.y)
         acc = correct / n_samples
         train_writer.add_scalar("Accuracy", acc, global_step)
-        print('Accuracy: {:.4f}'.format(acc))
-        print('True_positives {} over {}'.format(correct, n_samples))
+        print('Training accuracy: {:.4f}'.format(acc))
+
+        # Evaluation on the validation set 
+        model.eval()
+        correct = 0
+        n_samples = 0
+        with torch.no_grad():
+            for batch in val_data_loader:
+                _, pred = model(batch).max(dim=1)
+                correct += float(pred.eq(batch.y).sum().item())
+                n_samples += len(batch.y)
+        acc = correct / n_samples
+        val_writer.add_scalar("Accuracy", acc, global_step)
+        print('Validation accuracy: {:.4f}'.format(acc))
+        #print('True_positives {} over {}'.format(correct, n_samples))
     return
 
 
 if __name__ == "__main__":
+    os.environ['KMP_DUPLICATE_LIB_OK']='True'
     parser = argparse.ArgumentParser(description='Train the graph network.')
     parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
