@@ -10,20 +10,18 @@ import torch_geometric
 import utils
 from text_preprocessing import preprocess_tweets
 
+from sklearn.model_selection import train_test_split
+
 DATA_DIR = "rumor_detection_acl2017"
 
 
 class DatasetBuilder:
 
-    def __init__(self, dataset="twitter15", data_part="train", only_binary=True, time_cutoff=None):
-        """
+    def __init__(self, dataset="twitter15", only_binary=True, time_cutoff=None):
 
-        :type dataset_type: In [graph, raw]
-        """
         self.dataset = dataset
 
-        self.source_dir = os.path.join(DATA_DIR, dataset)
-        self.dataset_dir = os.path.join(self.source_dir, data_part)
+        self.dataset_dir = os.path.join(DATA_DIR, dataset)
         if not os.path.isdir(self.dataset_dir):
             raise IOError(f"{self.dataset_dir} doesn't exist")
 
@@ -35,31 +33,61 @@ class DatasetBuilder:
 
         self.time_cut = time_cutoff
         if self.time_cut is not None:
-            print("We consider tweets emitted no later than {}min after the root tweet".format(self.time_cut))
+            print("We consider tweets emitted no later than {}mins after the root tweet".format(self.time_cut))
         else:
             print("No time consideration")
 
     def create_dataset(self, dataset_type="graph"):
+        """
+        Args:
+            dataset_type:str. Has to be "graph" or "sequential"
+        Returns:
+            dict with keys "train", "val", "test":
+                If dataset_type is "graph" contains list of
+                    torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
+                If dataset_type is "sequential" contains list of
+                    (sequential_data, y)
+        """
         if dataset_type not in ["graph", "sequential"]:
             raise ValueError("supported dataset types are: 'graph', 'sequential'")
 
         start_time = time.time()
 
-        labels = self.load_labels()
-
-        tweet_features = self.load_tweet_features()
-        preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features)
-
-        user_features = self.load_user_features()
-        preprocessed_user_fts = self.preprocess_user_features(user_features)
-
         trees_to_parse = utils.get_tree_file_names(self.dataset_dir)
 
-        dataset = []
+        labels = self.load_labels()
+
+        # Create train-val-test split
+        # Remove useless trees (i.e. with labels that we don't consider)
+
+        news_ids_to_consider = list(labels.keys())
+        if self.only_binary:
+            news_ids_to_consider = [news_id for news_id in news_ids_to_consider 
+                                    if labels[news_id] in ['false', 'true']]
+
+        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size = 0.1, random_state = 42)
+        train_ids, test_ids = train_test_split(train_ids, test_size = 0.25, random_state = 68)
+        print(f"Len train/val/test {len(train_ids)} {len(val_ids)} {len(test_ids)}")
+
+        user_ids_in_train, tweet_ids_in_train = \
+            self.get_user_and_tweet_ids_in_train(trees_to_parse, train_ids)
+
+        tweet_features = self.load_tweet_features()
+        user_features = self.load_user_features()
+
+        preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
+        preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train)
+
+        ids_to_dataset = {news_id:'train' for news_id in train_ids}
+        ids_to_dataset.update({news_id:'val' for news_id in val_ids})
+        ids_to_dataset.update({news_id:'test' for news_id in test_ids})
+
+        dataset = {'train':[], 'val':[], 'test':[]}
 
         for tree_file_name in trees_to_parse:
-
-            label = labels[utils.get_root_id(tree_file_name)]
+            
+            news_id = utils.get_root_id(tree_file_name)
+            label = labels[news_id]
 
             if (not self.only_binary) or (label in ['false', 'true']):
 
@@ -72,13 +100,13 @@ class DatasetBuilder:
                     edge_index = np.array([edge[:2] for edge in edges],
                                           dtype=int)  # change if you want the time somewhere
                     edge_index = torch.tensor(edge_index).t().contiguous()
-                    dataset.append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+                    dataset[ids_to_dataset[news_id]].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
 
                 elif dataset_type == "sequential":
                     y = torch.tensor(utils.to_label(label))
                     ordered_edges = sorted(edges, key=lambda x: x[2])
                     sequential_data = torch.tensor([node_features[edge[1]] for edge in ordered_edges])
-                    dataset.append([sequential_data, y])
+                    dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                     print(sequential_data.mean(dim=0))
                     print("label was {}".format(label))
 
@@ -89,14 +117,13 @@ class DatasetBuilder:
     def load_labels(self):
         """
         Returns:
-            labels: dict[tweet_id:int -> label:int]
+            labels: dict[news_id:int -> label:int]
         """
-
         labels = {}
         with open(os.path.join(self.dataset_dir, "label.txt")) as label_file:
             for line in label_file.readlines():
-                label, tweet_id = line.split(":")
-                labels[int(tweet_id)] = label
+                label, news_id = line.split(":")
+                labels[int(news_id)] = label
         return labels
 
     def load_tweet_features(self):
@@ -115,7 +142,7 @@ class DatasetBuilder:
                 tweet_features[int(features[0])] = {self.tweet_feature_names[i]: features[i]
                                                     for i in range(1, len(features))}
 
-        with open(os.path.join(self.source_dir, "source_tweets.txt")) as text_file:
+        with open(os.path.join(self.dataset_dir, "source_tweets.txt")) as text_file:
             for line in text_file.readlines():
                 tweet_id, text = line.split("\t")
                 if tweet_id not in tweet_features.keys():
@@ -141,7 +168,7 @@ class DatasetBuilder:
                                                    for i in range(1, len(features))}
         return user_features
 
-    def preprocess_tweet_features(self, tweet_features):
+    def preprocess_tweet_features(self, tweet_features, tweet_ids_in_train):
         """ Preprocess all tweet features to transform dicts into fixed-sized array.
 
         Args:
@@ -168,7 +195,7 @@ class DatasetBuilder:
         new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
         return defaultdict(default_tweet_features, new_tweet_features)
 
-    def preprocess_user_features(self, user_features):
+    def preprocess_user_features(self, user_features, user_ids_in_train):
         """ Preprocess all user features to transform dicts into fixed-sized array.
 
         Args:
@@ -232,17 +259,22 @@ class DatasetBuilder:
 
             user_features[user_id] = new_features
 
+        user_features_train_only = {key:val for key, val in user_features.items() if key in user_ids_in_train}
+
+        # TODO: standardization here?
+        # Fit on user_features_train_only and apply on user_features and user_features_train_only
+
         dict_defaults = {
-            'created_at': np.median([elt["created_at"] for elt in user_features.values()]),
-            'favourites_count': np.median([elt["favourites_count"] for elt in user_features.values()]),
-            'followers_count': np.median([elt["followers_count"] for elt in user_features.values()]),
-            'friends_count': np.median([elt["friends_count"] for elt in user_features.values()]),
+            'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
+            'favourites_count': np.median([elt["favourites_count"] for elt in user_features_train_only.values()]),
+            'followers_count': np.median([elt["followers_count"] for elt in user_features_train_only.values()]),
+            'friends_count': np.median([elt["friends_count"] for elt in user_features_train_only.values()]),
             'geo_enabled': 0,
             'has_description': 0,
-            'len_name': np.median([elt["len_name"] for elt in user_features.values()]),
-            'len_screen_name': np.median([elt["len_screen_name"] for elt in user_features.values()]),
-            'listed_count': np.median([elt["listed_count"] for elt in user_features.values()]),
-            'statuses_count': np.median([elt["statuses_count"] for elt in user_features.values()]),
+            'len_name': np.median([elt["len_name"] for elt in user_features_train_only.values()]),
+            'len_screen_name': np.median([elt["len_screen_name"] for elt in user_features_train_only.values()]),
+            'listed_count': np.median([elt["listed_count"] for elt in user_features_train_only.values()]),
+            'statuses_count': np.median([elt["statuses_count"] for elt in user_features_train_only.values()]),
             'verified': 0
         }
 
@@ -255,6 +287,27 @@ class DatasetBuilder:
                             sorted(user_features.items(), key=lambda x: x[0])}
 
         return defaultdict(default_user_features, np_user_features)
+
+
+    def get_user_and_tweet_ids_in_train(self, trees_to_parse, train_ids):
+        """ Returns sets of all the user ids and tweet ids that appear in train set """
+
+        user_ids_in_train = set()
+        tweet_ids_in_train = set()
+        for tree_file_name in trees_to_parse:
+            news_id = utils.get_root_id(tree_file_name)
+            if news_id in train_ids:
+                with open(tree_file_name, "rt") as tree_file:
+                    for line in tree_file.readlines():
+                        if "ROOT" in line:
+                            continue
+                        tweet_in, tweet_out, user_in, user_out, _, _ = utils.parse_edge_line(line)
+                        user_ids_in_train.add(user_in)
+                        user_ids_in_train.add(user_out)
+                        tweet_ids_in_train.add(tweet_in)
+                        tweet_ids_in_train.add(tweet_out)
+        return user_ids_in_train, tweet_ids_in_train
+            
 
     def build_tree(self, tree_file_name, tweet_fts, user_fts):
         """ Parses the file to build a tree, adding all the features.
@@ -313,3 +366,6 @@ class DatasetBuilder:
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
     data_builder.create_dataset(dataset_type="sequential")
+    print()
+    data_builder = DatasetBuilder("twitter16")
+    data_builder.create_dataset(dataset_type="graph")
