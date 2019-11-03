@@ -253,13 +253,13 @@ class DatasetBuilder:
                 "listed_count",
                 "statuses_count",
             ]
-
+            #print(features.keys())
             for int_feature in integer_features:
                 new_features[int_feature] = int(features[int_feature])
 
-            new_features["verified"] = 1 if features['verified'] == 'True' else 0
-            new_features["geo_enabled"] = 1 if features['geo_enabled'] == 'True' else 0
-            new_features['has_description'] = 1 if len(features['description']) > 0 else 0
+            new_features["verified"] = int(features['verified']=='True')
+            new_features["geo_enabled"] = int(features['geo_enabled']=='True')
+            new_features['has_description'] = int(len(features['description']) > 0)
             new_features['len_name'] = len(features['name'])
             new_features['len_screen_name'] = len(features['screen_name'])
 
