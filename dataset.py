@@ -157,7 +157,6 @@ class DatasetBuilder:
                 tweet_features[tweet_id]['created_at'] = \
                     utils.from_date_text_to_timestamp(tweet_features[tweet_id]['created_at'])
 
-
         # print('running tf-idf')
         # self.text_features = preprocess_tweets(self.tweet_texts)
         # self.n_text_features = len(list(self.text_features.values())[0])
@@ -176,37 +175,9 @@ class DatasetBuilder:
             user_features: dict[user_id -> dict[name_feature -> feature]]
         Returns:
             defaultdict[user_id -> np.array(n_dim)]
-        
         """
-
-        # TODO: more preprocessing, this is just a beginning.
-        count, created, followers, friends, statuses, verified = 0, 0, 0, 0, 0, 0
-
-        for user_id, features in user_features.items():
-            new_features = {}
-            if "created_at" in features:
-                new_features['created_at'] = \
-                    utils.from_date_text_to_timestamp(user_features[user_id]['created_at'])
-                created += utils.from_date_text_to_timestamp(user_features[user_id]['created_at'])
-            if "followers_count" in features:
-                new_features['followers_count'] = int(features['followers_count'])
-                followers +=  int(features['followers_count'])
-            if "friends_count" in features:
-                new_features['friends_count'] = int(features['friends_count'])
-                friends += int(features['friends_count'])
-            if "statuses_count" in features:
-                new_features['statuses_count'] = int(features['statuses_count'])
-                statuses += int(features['statuses_count'])
-            if "verified" in features:
-                new_features['verified'] = 1 if features['verified'] == "True" else 0
-                verified += new_features['verified']
-            user_features[user_id] = new_features
-            count += 1
-        created /= count
-        followers /= count
-        friends /= count
-        statuses /= count
-        verified /= count
+        
+        # Available variables
         # id;
         # created_at;
         # description;
@@ -220,11 +191,70 @@ class DatasetBuilder:
         # screen_name;
         # statuses_count;
         # verified
-        def default_user_features():
-            return np.array([created, followers, friends, statuses, verified])
 
-        new_user_features = {key: np.array(list(val.values())) for key, val in user_features.items()}
-        return defaultdict(default_user_features, new_user_features)
+        # Features we use:
+        # created_at
+        # favourites_count 
+        # followers_count 
+        # friends_count 
+        # geo_enabled
+        # has_description
+        # len_name
+        # len_screen_name
+        # listed_count
+        # statuses_count 
+        # verified
+
+        for user_id, features in user_features.items():
+
+            new_features = {} # will contain the processed features of current user
+
+            if "created_at" in features:
+                new_features['created_at'] = \
+                    utils.from_date_text_to_timestamp(features['created_at'])
+
+            integer_features = [
+                "favourites_count", 
+                "followers_count", 
+                "friends_count", 
+                "listed_count", 
+                "statuses_count", 
+            ]
+
+            for int_feature in integer_features:
+                new_features[int_feature] = int(features[int_feature])
+
+            new_features["verified"] = 1 if features['verified']=='True' else 0
+            new_features["geo_enabled"] = 1 if features['geo_enabled']=='True' else 0
+            new_features['has_description'] = 1 if len(features['description']) > 0 else 0
+            new_features['len_name'] = len(features['name'])
+            new_features['len_screen_name'] = len(features['screen_name'])
+
+            user_features[user_id] = new_features
+
+        dict_defaults = {
+            'created_at': np.median([elt["created_at"] for elt in user_features.values()]),
+            'favourites_count': np.median([elt["favourites_count"] for elt in user_features.values()]),
+            'followers_count': np.median([elt["followers_count"] for elt in user_features.values()]),
+            'friends_count': np.median([elt["friends_count"] for elt in user_features.values()]),
+            'geo_enabled': 0,
+            'has_description': 0,
+            'len_name': np.median([elt["len_name"] for elt in user_features.values()]),
+            'len_screen_name': np.median([elt["len_screen_name"] for elt in user_features.values()]),
+            'listed_count': np.median([elt["listed_count"] for elt in user_features.values()]),
+            'statuses_count': np.median([elt["statuses_count"] for elt in user_features.values()]),
+            'verified': 0
+        }
+
+        def default_user_features():
+            """ Return np array of default features sorted by alphabetic order """
+            return np.array([val for key, val in 
+                            sorted(dict_defaults.items(), key=lambda x: x[0])])
+
+        np_user_features = {key: np.array(list(val.values())) for key, val in 
+                            sorted(user_features.items(), key=lambda x: x[0])}
+
+        return defaultdict(default_user_features, np_user_features)
 
     def build_tree(self, tree_file_name, tweet_fts, user_fts):
         """ Parses the file to build a tree, adding all the features.
@@ -236,10 +266,8 @@ class DatasetBuilder:
             labels: dict[tweet_id:int -> label:int]
 
         Returns:
-            torch_geometric.data.Data, which contains
-                (x:Tensor(n_nodes * n_features)
-                 y:Tensor(n_nodes)
-                 edge_index: Tensor(2 * E))
+            x: list (n_nodes)[np.array (n_features)]
+            edge_index: list (nb_edges)[node_in_id, node_out_id, time_out]
         """
 
         def agglomerate_features(node_tweet_fts, node_user_fts):
