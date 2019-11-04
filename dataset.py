@@ -40,7 +40,7 @@ class DatasetBuilder:
         else:
             print("No time consideration")
 
-    def create_dataset(self, dataset_type="graph"):
+    def create_dataset(self, dataset_type="graph", standardize_features=True):
         """
         Args:
             dataset_type:str. Has to be "graph", "sequential" or "raw"
@@ -79,7 +79,7 @@ class DatasetBuilder:
         user_features = self.load_user_features()
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
-        preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train)
+        preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
 
         ids_to_dataset = {news_id: 'train' for news_id in train_ids}
         ids_to_dataset.update({news_id: 'val' for news_id in val_ids})
@@ -113,7 +113,9 @@ class DatasetBuilder:
                     # print(sequential_data.mean(dim=0))
                     # print("label was {}".format(label))
                 elif dataset_type == "raw":
-                    dataset[ids_to_dataset[news_id]].append([[news_id] + edge + list(node_features[edge[1]]) for edge in edges])
+                    dataset[ids_to_dataset[news_id]].append(
+                        [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
+                         edges])  # edge[1] means we care about features for out_tweet
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -202,7 +204,7 @@ class DatasetBuilder:
         new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
         return defaultdict(default_tweet_features, new_tweet_features)
 
-    def preprocess_user_features(self, user_features, user_ids_in_train):
+    def preprocess_user_features(self, user_features, user_ids_in_train, standardize_features=True):
         """ Preprocess all user features to transform dicts into fixed-sized array.
 
         Args:
@@ -254,12 +256,12 @@ class DatasetBuilder:
                 "listed_count",
                 "statuses_count",
             ]
-            #print(features.keys())
+            # print(features.keys())
             for int_feature in integer_features:
                 new_features[int_feature] = int(features[int_feature])
 
-            new_features["verified"] = int(features['verified']=='True')
-            new_features["geo_enabled"] = int(features['geo_enabled']=='True')
+            new_features["verified"] = int(features['verified'] == 'True')
+            new_features["geo_enabled"] = int(features['geo_enabled'] == 'True')
             new_features['has_description'] = int(len(features['description']) > 0)
             new_features['len_name'] = len(features['name'])
             new_features['len_screen_name'] = len(features['screen_name'])
@@ -269,27 +271,28 @@ class DatasetBuilder:
         user_features_train_only = {key: val for key, val in user_features.items() if key in user_ids_in_train}
 
         # Standardizing
-        for ft in [
-            "created_at",
-            "favourites_count",
-            "followers_count",
-            "friends_count",
-            "listed_count",
-            "statuses_count",
-            "len_name",
-            "len_screen_name"
-        ]:
-            scaler = StandardScaler().fit(
-                np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
-            )
+        if standardize_features:
+            for ft in [
+                "created_at",
+                "favourites_count",
+                "followers_count",
+                "friends_count",
+                "listed_count",
+                "statuses_count",
+                "len_name",
+                "len_screen_name"
+            ]:
+                scaler = StandardScaler().fit(
+                    np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
+                )
 
-            # faster to do this way as we don't have to convert to np arrays
-            mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
-            for key in user_features_train_only.keys():
-                user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
+                # faster to do this way as we don't have to convert to np arrays
+                mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
+                for key in user_features_train_only.keys():
+                    user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
 
-            for key in user_features.keys():
-                user_features[key][ft] = (user_features[key][ft] - mean) / std
+                for key in user_features.keys():
+                    user_features[key][ft] = (user_features[key][ft] - mean) / std
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
@@ -309,8 +312,10 @@ class DatasetBuilder:
             """ Return np array of default features sorted by alphabetic order """
             return np.array([val for key, val in
                              sorted(dict_defaults.items(), key=lambda x: x[0])])
-        # "user features: key=uid, value=dict[ftname:valueft]"
-        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for key, value in user_features.items()}
+
+        #  user features: key=uid, value=dict[ftname:valueft]
+        np_user_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]) for
+                            key, value in user_features.items()}
 
         return defaultdict(default_user_features, np_user_features)
 

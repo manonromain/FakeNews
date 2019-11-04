@@ -7,8 +7,13 @@ import torch_geometric
 import torch_geometric.nn as pyg_nn
 from torch_geometric.nn import GCNConv
 from torch.utils.tensorboard import SummaryWriter
+<<<<<<< HEAD
 from torch_geometric.datasets import TUDataset
 from models import FirstNet, GNNStack
+=======
+
+from models import FirstNet, GNNStackz
+>>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
 from dataset import DatasetBuilder
 import numpy as np
 
@@ -54,14 +59,17 @@ def train(dataset, args):
         print("Restoring previous model at epoch", epoch_ckp)
 
     # Training phase
-    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
         epoch_loss = 0
+<<<<<<< HEAD
         for batch in train_data_loader:
             #import pdb; pdb.set_trace()
             optimizer.zero_grad()
+=======
+        for batch in data_loader:
+>>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
             out = model(batch)
             loss = F.nll_loss(out, batch.y)
             epoch_loss += loss.sum().item()
@@ -78,23 +86,28 @@ def train(dataset, args):
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
-            "epoch_loss": epoch_loss / len(train_data_loader),
+            "epoch_loss": epoch_loss / len(data_loader),
             "global_step": global_step
         }
         torch.save(checkpoint, checkpoint_path)
-        print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
+        print("epoch", epoch, "loss:", epoch_loss / len(data_loader))
 
+<<<<<<< HEAD
         # Evaluation on the training set 
+=======
+        # Evaluation on the TRAINING SET 
+>>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
         model.eval()
         correct = 0
         n_samples = 0
         with torch.no_grad():
-            for batch in train_data_loader:
+            for batch in data_loader:
                 _, pred = model(batch).max(dim=1)
                 correct += float(pred.eq(batch.y).sum().item())
                 n_samples += len(batch.y)
         acc = correct / n_samples
         train_writer.add_scalar("Accuracy", acc, global_step)
+<<<<<<< HEAD
         print('Training accuracy: {:.4f}'.format(acc))
 
         # Evaluation on the validation set 
@@ -111,11 +124,14 @@ def train(dataset, args):
         val_writer.add_scalar("Accuracy", acc, global_step)
         print('Validation accuracy: {:.4f}'.format(acc))
         #print('True_positives {} over {}'.format(correct, n_samples))
+=======
+        print('Accuracy: {:.4f}'.format(acc))
+        print('True_positives {} over {}'.format(correct, n_samples))
+>>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
     return
 
 
 if __name__ == "__main__":
-    os.environ['KMP_DUPLICATE_LIB_OK']='True'
     parser = argparse.ArgumentParser(description='Train the graph network.')
     parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
