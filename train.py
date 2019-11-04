@@ -7,20 +7,15 @@ import torch_geometric
 import torch_geometric.nn as pyg_nn
 from torch_geometric.nn import GCNConv
 from torch.utils.tensorboard import SummaryWriter
-<<<<<<< HEAD
 from torch_geometric.datasets import TUDataset
 from models import FirstNet, GNNStack
-=======
-
-from models import FirstNet, GNNStackz
->>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
 from dataset import DatasetBuilder
 import numpy as np
 
 def train(dataset, args):
 
     # Loading dataset
-    dataset_builder = DatasetBuilder(dataset, only_binary=True)
+    dataset_builder = DatasetBuilder(dataset)
     datasets = dataset_builder.create_dataset()
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
