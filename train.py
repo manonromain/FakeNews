@@ -58,13 +58,9 @@ def train(dataset, args):
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
         epoch_loss = 0
-<<<<<<< HEAD
         for batch in train_data_loader:
             #import pdb; pdb.set_trace()
             optimizer.zero_grad()
-=======
-        for batch in data_loader:
->>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
             out = model(batch)
             loss = F.nll_loss(out, batch.y)
             epoch_loss += loss.sum().item()
@@ -87,11 +83,7 @@ def train(dataset, args):
         torch.save(checkpoint, checkpoint_path)
         print("epoch", epoch, "loss:", epoch_loss / len(data_loader))
 
-<<<<<<< HEAD
         # Evaluation on the training set 
-=======
-        # Evaluation on the TRAINING SET 
->>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
         model.eval()
         correct = 0
         n_samples = 0
@@ -102,7 +94,6 @@ def train(dataset, args):
                 n_samples += len(batch.y)
         acc = correct / n_samples
         train_writer.add_scalar("Accuracy", acc, global_step)
-<<<<<<< HEAD
         print('Training accuracy: {:.4f}'.format(acc))
 
         # Evaluation on the validation set 
@@ -118,11 +109,6 @@ def train(dataset, args):
         acc = correct / n_samples
         val_writer.add_scalar("Accuracy", acc, global_step)
         print('Validation accuracy: {:.4f}'.format(acc))
-        #print('True_positives {} over {}'.format(correct, n_samples))
-=======
-        print('Accuracy: {:.4f}'.format(acc))
-        print('True_positives {} over {}'.format(correct, n_samples))
->>>>>>> 4dba832d6ff757ed5f16d231fd6e134cb47b2366
     return
 
 
