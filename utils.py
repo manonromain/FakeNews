@@ -48,3 +48,9 @@ def to_label(label):
 def from_date_text_to_timestamp(datestr):
     year, month, day = map(int, datestr.split()[0].split("-"))
     return (datetime(year, month, day) - datetime(1970, 1, 1)) / timedelta(days=1)
+
+
+def cap_sequences(sequential_dataset, cap_len):
+    sequential_dataset = [elt for elt in sequential_dataset if len(elt[0].shape) > 1]
+    sequential_dataset = [[elt[0][:cap_len, :], elt[1]] for elt in sequential_dataset if elt[0].size(0) >= cap_len]
+    return sequential_dataset

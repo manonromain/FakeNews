@@ -6,20 +6,22 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn.utils.rnn import pad_sequence
 import random
 from dataset import DatasetBuilder
+from utils import cap_sequences
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
 parser.add_argument('--lr', default=0.01,
                     help='learning rate')
-parser.add_argument('--num_epochs', default=200,
+parser.add_argument('--num_epochs', default=1000,
                     help='Number of epochs')
-parser.add_argument('--num_layers', default=2, type=int,
+parser.add_argument('--num_layers', default=1, type=int,
                     help='Number of layers')
 parser.add_argument('--hidden_size', default=128, type=int,
                     help='Hidden size')
 parser.add_argument('--dropout', default=0.)
-parser.add_argument('--batch_size', default=32, type=int,
+parser.add_argument('--batch_size', default=64, type=int,
                     help='Batch_size')
 parser.add_argument('--debug', default=1, type=int,
                     help='In debugging, we train on val and try to overfit it')
@@ -52,7 +54,7 @@ class LSTMClassifier(nn.Module):
         return self.linear(output)
 
 
-def dataset_iterator(dataset, batch_size=32, shuffle=True, cap_len=None):
+def dataset_iterator(dataset, batch_size=32, shuffle=True):
     """
     :param dataset: sequential dataset as returned by create_dataset
     :param batch_size
@@ -66,11 +68,7 @@ def dataset_iterator(dataset, batch_size=32, shuffle=True, cap_len=None):
     count_sampled = 0
     n = len(dataset)
     while (count_sampled < n):
-        batch_to_yield = dataset[count_sampled:count_sampled + batch_size]
-        if cap_len is None:
-            yield batch_to_yield
-        else:
-            yield [[elt[0][:cap_len, :], elt[1]] for elt in batch_to_yield]
+        yield dataset[count_sampled:count_sampled + batch_size]
         count_sampled += batch_size
 
 
@@ -96,8 +94,7 @@ def train(args, model, optim, train_loader, test_loader=None, baseline_accuracy=
         model.train()
         epoch_loss = 0
         running_loss = 0
-        for ix, batch in enumerate(dataset_iterator(train_loader, batch_size=args.batch_size, shuffle=True,
-                                                    cap_len=None if not args.cap_len else args.cap_len)):
+        for ix, batch in enumerate(dataset_iterator(train_loader, batch_size=args.batch_size, shuffle=True)):
             # import pdb;
             # pdb.set_trace()
             sequences, ys = list(zip(*batch))
@@ -135,24 +132,24 @@ def train(args, model, optim, train_loader, test_loader=None, baseline_accuracy=
         print("epoch", epoch, "loss:", args.batch_size * epoch_loss / len(train_loader))
 
         # Evaluation on the TRAINING SET
-        test_loader = train_loader if test_loader is None else test_loader
-        model.eval()
-        correct = 0
-        n_samples = 0
-        with torch.no_grad():
-            for batch in dataset_iterator(train_loader, batch_size=args.batch_size, shuffle=True,
-                                                    cap_len=None if not args.cap_len else args.cap_len):
-                sequences, ys = list(zip(*batch))
-                ys = torch.cat(ys)
-                sequences = pad_sequence(sequences, batch_first=True)
-                _, pred = model(sequences.float()).max(dim=1)
-                # import pdb;
-                # pdb.set_trace()
-                correct += float(pred.eq(ys).sum().item())
-                n_samples += pred.size(0)
-        acc = correct / n_samples
-        train_writer.add_scalar("Accuracy", acc, global_step)
-        print('Accuracy: {:.4f}, vs Baseline Accuracy: {:.4f}'.format(acc, baseline_accuracy))
+        if (epoch + 1) % 5 ==0:
+            test_loader = train_loader if test_loader is None else test_loader
+            model.eval()
+            correct = 0
+            n_samples = 0
+            with torch.no_grad():
+                for batch in dataset_iterator(test_loader, batch_size=args.batch_size, shuffle=True):
+                    sequences, ys = list(zip(*batch))
+                    ys = torch.cat(ys)
+                    sequences = pad_sequence(sequences, batch_first=True)
+                    _, pred = model(sequences.float()).max(dim=1)
+                    # import pdb;
+                    # pdb.set_trace()
+                    correct += float(pred.eq(ys).sum().item())
+                    n_samples += pred.size(0)
+            acc = correct / n_samples
+            train_writer.add_scalar("Accuracy", acc, global_step)
+            print('Accuracy: {:.4f}, vs Baseline Accuracy: {:.4f}'.format(acc, baseline_accuracy))
     return
 
 
@@ -163,18 +160,20 @@ if __name__ == "__main__":
     dataset_builder = DatasetBuilder(args.dataset, only_binary=True, time_cutoff=1500)
     full_dataset = dataset_builder.create_dataset(dataset_type="sequential")
     val_dataset = full_dataset['val']
-    val_dataset = [elt for elt in val_dataset if len(elt[0].shape) > 1]
+    initial_len = len(val_dataset)
+    val_dataset = cap_sequences(val_dataset, args.cap_len)
 
     if args.debug:
         train_dataset = val_dataset
     else:
         train_dataset = full_dataset['train']
-        # sometimes the sequence has only one element because of the time_cutoff decision
-        train_dataset = [elt for elt in train_dataset if len(elt[0].shape) > 1]
+        initial_len = len(train_dataset)
+        train_dataset = cap_sequences(train_dataset, args.cap_len) # we only keep datapoints where the seq len is <= cap
     # import pdb;
     # pdb.set_trace()
     print("Some stats about the training data: {} data points, {} features".format(len(train_dataset),
                                                                                    train_dataset[0][0].size(1)))
+    print(f"Number of trees with len >= to the minimum -{args.cap_len}- : {len(train_dataset)}, intial_len was: {initial_len}")
     baseline_acc = sum([elt[1].item() for elt in train_dataset])/len(train_dataset)
     baseline_acc = max(1 - baseline_acc, baseline_acc)
     print(f"Baseline accuracy is {baseline_acc:.2f}")
@@ -182,4 +181,4 @@ if __name__ == "__main__":
     model = LSTMClassifier(input_size=train_dataset[0][0].size(1), h_size=args.hidden_size, n_layers=args.num_layers,
                            dropout=args.dropout)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    train(args, model, optimizer, train_dataset, val_dataset, baseline_acc)
+    train(args, model, optimizer, train_dataset, train_dataset, baseline_acc)
