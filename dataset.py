@@ -115,7 +115,7 @@ class DatasetBuilder:
                 elif dataset_type == "raw":
                     dataset[ids_to_dataset[news_id]].append(
                         [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
-                         edges])  # edge[1] means we care about features for out_tweet
+                         edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -332,7 +332,7 @@ class DatasetBuilder:
                         if "ROOT" in line:
                             continue
                         tweet_in, tweet_out, user_in, user_out, _, _ = utils.parse_edge_line(line)
-                        user_ids_in_train.add(user_in)
+                        user_ids_in_train.add(user_in) #user_ids_in_train may be bigger
                         user_ids_in_train.add(user_out)
                         tweet_ids_in_train.add(tweet_in)
                         tweet_ids_in_train.add(tweet_out)
@@ -357,7 +357,7 @@ class DatasetBuilder:
 
         edges = []  #
         x = []
-        tweet_id_to_count = {}  # Dict tweet id -> node id, which starts at 0
+        node_id_to_count = {}  # Dict tweet id, user id -> node id, which starts at 0 # changed as before, a tweet can be seen a first time with a given uid then a second time with a different one
         count = 0
 
         self.number_of_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
@@ -370,28 +370,32 @@ class DatasetBuilder:
                     continue
 
                 tweet_in, tweet_out, user_in, user_out, time_in, time_out = utils.parse_edge_line(line)
+                # if user_out == 1097099569:
+                #     print(user_fts[user_out])
 
                 if (self.time_cut is None) or (time_out >= 0 and time_out <= self.time_cut):
                     # Add orig if unseen
-                    if tweet_in not in tweet_id_to_count:
-                        tweet_id_to_count[tweet_in] = count
+                    if (tweet_in, user_in) not in node_id_to_count:
+                        node_id_to_count[(tweet_in, user_in)] = count
                         features_node = agglomerate_features(tweet_fts[tweet_in], user_fts[user_in])
                         x.append(features_node)
                         count += 1
 
                     # Add dest if unseen
-                    if tweet_out not in tweet_id_to_count:
-                        tweet_id_to_count[tweet_out] = count
+                    if (tweet_out, user_out) not in node_id_to_count:
+                        node_id_to_count[(tweet_out, user_out)] = count
                         features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
                         x.append(features_node)
                         count += 1
 
                     # Add edge
-                    edges.append([tweet_id_to_count[tweet_in],
-                                  tweet_id_to_count[tweet_out],
+                    edges.append([node_id_to_count[(tweet_in, user_in)],
+                                  node_id_to_count[(tweet_out, user_out)],
                                   time_out,
                                   user_in,
                                   user_out])
+                    # if user_out == 1097099569:
+                    #     print(x[node_id_to_count[(tweet_out, user_out)]])
 
         return x, edges
 

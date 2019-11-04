@@ -7,21 +7,21 @@ from torch.nn.utils.rnn import pad_sequence
 import random
 from dataset import DatasetBuilder
 from utils import cap_sequences
-import numpy as np
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
 parser.add_argument('--lr', default=0.01,
                     help='learning rate')
-parser.add_argument('--num_epochs', default=1000,
+parser.add_argument('--num_epochs', default=250,
                     help='Number of epochs')
 parser.add_argument('--num_layers', default=1, type=int,
                     help='Number of layers')
-parser.add_argument('--hidden_size', default=128, type=int,
+parser.add_argument('--hidden_size', default=32, type=int,
                     help='Hidden size')
 parser.add_argument('--dropout', default=0.)
-parser.add_argument('--batch_size', default=64, type=int,
+parser.add_argument('--batch_size', default=8, type=int,
                     help='Batch_size')
 parser.add_argument('--debug', default=1, type=int,
                     help='In debugging, we train on val and try to overfit it')
@@ -39,7 +39,7 @@ class LSTMClassifier(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=h_size, num_layers=n_layers,
                             batch_first=True, dropout=dropout,
                             bidirectional=False)
-        self.linear = nn.Linear(h_size * n_layers, n_classes)
+        self.linear = nn.Linear(h_size, n_classes)
         self.n_classes = n_classes
         self.n_layers = n_layers
 
@@ -49,9 +49,8 @@ class LSTMClassifier(nn.Module):
         output is of size (B, hidden_size * num layers) -> concatenation of the last hidden state over the LSTM layers
         returns = the logits of this output passed to a linear layer
         """
-        _, (h_n, _) = self.lstm(seq)
-        output = torch.cat([h_n[i, :, :] for i in range(self.n_layers)], dim=-1)
-        return self.linear(output)
+        out, (_, _) = self.lstm(seq)
+        return self.linear(out.mean(1))
 
 
 def dataset_iterator(dataset, batch_size=32, shuffle=True):
