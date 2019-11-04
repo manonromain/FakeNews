@@ -7,20 +7,28 @@ import torch_geometric
 import torch_geometric.nn as pyg_nn
 from torch_geometric.nn import GCNConv
 from torch.utils.tensorboard import SummaryWriter
-
-from models import FirstNet, GNNStackz
+from torch_geometric.datasets import TUDataset
+from models import FirstNet, GNNStack
 from dataset import DatasetBuilder
-
+import numpy as np
 
 def train(dataset, args):
 
     # Loading dataset
     dataset_builder = DatasetBuilder(dataset)
-    dataset = dataset_builder.create_dataset()
-    data_loader = torch_geometric.data.DataLoader(dataset, batch_size=args.batch_size)
+    datasets = dataset_builder.create_dataset()
+    train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
+    val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
+    test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
+    #dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
+    #train_data_loader = torch_geometric.data.DataLoader(dataset[:int(0.7*len(dataset))], batch_size=args.batch_size, shuffle=True)
+
+    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.7*len(dataset)):int(0.8*len(dataset))], batch_size=args.batch_size, shuffle=True)
+    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.8*len(dataset)):], batch_size=args.batch_size, shuffle=True)
 
     # Setting up model
-    model = FirstNet(dataset_builder.number_of_features, 4)
+    model = GNNStack(dataset_builder.number_of_features, 64, dataset_builder.num_classes, args)
+    # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
@@ -49,9 +57,10 @@ def train(dataset, args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
-        optimizer.zero_grad()
         epoch_loss = 0
-        for batch in data_loader:
+        for batch in train_data_loader:
+            #import pdb; pdb.set_trace()
+            optimizer.zero_grad()
             out = model(batch)
             loss = F.nll_loss(out, batch.y)
             epoch_loss += loss.sum().item()
@@ -74,7 +83,7 @@ def train(dataset, args):
         torch.save(checkpoint, checkpoint_path)
         print("epoch", epoch, "loss:", epoch_loss / len(data_loader))
 
-        # Evaluation on the TRAINING SET 
+        # Evaluation on the training set 
         model.eval()
         correct = 0
         n_samples = 0
@@ -85,8 +94,21 @@ def train(dataset, args):
                 n_samples += len(batch.y)
         acc = correct / n_samples
         train_writer.add_scalar("Accuracy", acc, global_step)
-        print('Accuracy: {:.4f}'.format(acc))
-        print('True_positives {} over {}'.format(correct, n_samples))
+        print('Training accuracy: {:.4f}'.format(acc))
+
+        # Evaluation on the validation set 
+        model.eval()
+        correct = 0
+        n_samples = 0
+        with torch.no_grad():
+            for batch in val_data_loader:
+                _, pred = model(batch).max(dim=1)
+                #print(pred, batch.y)
+                correct += float(pred.eq(batch.y).sum().item())
+                n_samples += len(batch.y)
+        acc = correct / n_samples
+        val_writer.add_scalar("Accuracy", acc, global_step)
+        print('Validation accuracy: {:.4f}'.format(acc))
     return
 
 
@@ -100,7 +122,7 @@ if __name__ == "__main__":
                     help='Number of epochs')
     parser.add_argument('--num_layers', default=2, type=int,
                     help='Number of layers')
-    parser.add_argument('--dropout', default=0.2,
+    parser.add_argument('--dropout', default=0.0,
                     help='Model type for GNNStack')
     parser.add_argument('--model_type', default="GAT",
                     help='Model type for GNNStack')

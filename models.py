@@ -56,9 +56,9 @@ class GNNStack(torch.nn.Module):
         if model_type == 'GCN':
             return pyg_nn.GCNConv
         elif model_type == 'GraphSage':
-            return pyg_nn.sage_conv
+            return pyg_nn.SAGEConv
         elif model_type == 'GAT':
-            return pyg_nn.gat_conv
+            return pyg_nn.GATConv
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch

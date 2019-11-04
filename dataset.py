@@ -28,8 +28,10 @@ class DatasetBuilder:
 
         self.only_binary = only_binary
         if self.only_binary:
+            self.num_classes = 2
             print("Considering only binary classification problem")
         else:
+            self.num_classes = 4
             print("Considering 4 classes problem")
 
         self.time_cut = time_cutoff
@@ -359,6 +361,8 @@ class DatasetBuilder:
         count = 0
 
         self.number_of_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
+        # TODO kept previous line for backward compatibility but next line has the correct name
+        self.num_node_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
 
         with open(tree_file_name, "rt") as tree_file:
             for line in tree_file.readlines():
