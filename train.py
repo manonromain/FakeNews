@@ -7,22 +7,28 @@ import torch_geometric
 import torch_geometric.nn as pyg_nn
 from torch_geometric.nn import GCNConv
 from torch.utils.tensorboard import SummaryWriter
-
+from torch_geometric.datasets import TUDataset
 from models import FirstNet, GNNStack
 from dataset import DatasetBuilder
-
+import numpy as np
 
 def train(dataset, args):
 
     # Loading dataset
     dataset_builder = DatasetBuilder(dataset, only_binary=True)
     datasets = dataset_builder.create_dataset()
-    train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size)
-    val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size)
-    test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size)
+    train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
+    val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
+    test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
+    #dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
+    #train_data_loader = torch_geometric.data.DataLoader(dataset[:int(0.7*len(dataset))], batch_size=args.batch_size, shuffle=True)
+
+    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.7*len(dataset)):int(0.8*len(dataset))], batch_size=args.batch_size, shuffle=True)
+    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.8*len(dataset)):], batch_size=args.batch_size, shuffle=True)
 
     # Setting up model
-    model = FirstNet(dataset_builder.number_of_features, 2)
+    model = GNNStack(dataset_builder.number_of_features, 64, dataset_builder.num_classes, args)
+    # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
@@ -52,10 +58,10 @@ def train(dataset, args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
-        optimizer.zero_grad()
         epoch_loss = 0
         for batch in train_data_loader:
             #import pdb; pdb.set_trace()
+            optimizer.zero_grad()
             out = model(batch)
             loss = F.nll_loss(out, batch.y)
             epoch_loss += loss.sum().item()
@@ -78,7 +84,7 @@ def train(dataset, args):
         torch.save(checkpoint, checkpoint_path)
         print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
 
-        # Evaluation on the validation set 
+        # Evaluation on the training set 
         model.eval()
         correct = 0
         n_samples = 0
@@ -98,6 +104,7 @@ def train(dataset, args):
         with torch.no_grad():
             for batch in val_data_loader:
                 _, pred = model(batch).max(dim=1)
+                #print(pred, batch.y)
                 correct += float(pred.eq(batch.y).sum().item())
                 n_samples += len(batch.y)
         acc = correct / n_samples
@@ -118,7 +125,7 @@ if __name__ == "__main__":
                     help='Number of epochs')
     parser.add_argument('--num_layers', default=2, type=int,
                     help='Number of layers')
-    parser.add_argument('--dropout', default=0.2,
+    parser.add_argument('--dropout', default=0.0,
                     help='Model type for GNNStack')
     parser.add_argument('--model_type', default="GAT",
                     help='Model type for GNNStack')
