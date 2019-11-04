@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 
 DATA_DIR = "rumor_detection_acl2017"
 
+import basic_tests
 
 class DatasetBuilder:
 
@@ -80,6 +81,8 @@ class DatasetBuilder:
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
+        
+        basic_tests.test_user_preprocessed_features(preprocessed_user_fts)
 
         ids_to_dataset = {news_id: 'train' for news_id in train_ids}
         ids_to_dataset.update({news_id: 'val' for news_id in val_ids})
@@ -370,8 +373,6 @@ class DatasetBuilder:
                     continue
 
                 tweet_in, tweet_out, user_in, user_out, time_in, time_out = utils.parse_edge_line(line)
-                # if user_out == 1097099569:
-                #     print(user_fts[user_out])
 
                 if (self.time_cut is None) or (time_out >= 0 and time_out <= self.time_cut):
                     # Add orig if unseen
@@ -394,16 +395,14 @@ class DatasetBuilder:
                                   time_out,
                                   user_in,
                                   user_out])
-                    # if user_out == 1097099569:
-                    #     print(x[node_id_to_count[(tweet_out, user_out)]])
 
         return x, edges
 
 
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
-    dataset = data_builder.create_dataset(dataset_type="sequential")
+    dataset = data_builder.create_dataset(dataset_type="sequential", standardize_features=False)
     # import pdb;
     # pdb.set_trace()
-    data_builder = DatasetBuilder("twitter16")
-    data_builder.create_dataset(dataset_type="graph")
+    # data_builder = DatasetBuilder("twitter16")
+    # data_builder.create_dataset(dataset_type="graph")
