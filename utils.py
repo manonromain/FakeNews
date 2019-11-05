@@ -28,12 +28,12 @@ def preprocess_sequences_to_fixed_len(seq_data, cap_len, features_dim):
     return results, idx_removed
 
 
-def standardize_and_turn_tensor(seq_data_preprocessed):
+def standardize_and_turn_tensor(seq_data_preprocessed, standardize = True):
     print(f"Shape of input seq data is ndarry of shape {seq_data_preprocessed.shape}")
     seq_tensor = torch.from_numpy(seq_data_preprocessed)
     means = seq_tensor.mean(dim=(0, 1), keepdim=True)
     stds = seq_tensor.std(dim=(0, 1), keepdim=True)
-    return (seq_tensor - means) / stds
+    return (seq_tensor - means) / stds if standardize else seq_tensor
 
 
 def parse_edge_line(line):
