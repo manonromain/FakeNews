@@ -2,6 +2,38 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import glob
+import torch
+
+
+def preprocess_sequences_to_fixed_len(seq_data, cap_len, features_dim):
+    X = [x for x,y in seq_data]
+    results = []
+    count_oversampling = 0
+    idx_removed = []
+    for i, sequence in enumerate(X):
+        if len(sequence.shape) >= 2:
+            len_seq = sequence.shape[0]
+            if len_seq < cap_len:
+                indexes_oversampled = np.random.choice(len_seq, cap_len - len_seq)
+                sequence = np.concatenate((sequence, sequence[indexes_oversampled, :]), 0)
+                count_oversampling += 1
+            else:
+                sequence = sequence[:cap_len, :]
+            results.append(sequence)
+        else:
+            idx_removed.append(i)
+    results = np.array(results, dtype=float)
+    print(f"Fixed-length preprocessing: lost {len(idx_removed)} sequences that were unit-sized, oversampled {count_oversampling} sequences")
+    assert len(idx_removed) == (len(X) - results.shape[0])
+    return results, idx_removed
+
+
+def standardize_and_turn_tensor(seq_data_preprocessed):
+    print(f"Shape of input seq data is ndarry of shape {seq_data_preprocessed.shape}")
+    seq_tensor = torch.from_numpy(seq_data_preprocessed)
+    means = seq_tensor.mean(dim=(0, 1), keepdim=True)
+    stds = seq_tensor.std(dim=(0, 1), keepdim=True)
+    return (seq_tensor - means) / stds
 
 
 def parse_edge_line(line):

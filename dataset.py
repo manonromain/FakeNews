@@ -82,7 +82,7 @@ class DatasetBuilder:
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
         
-        basic_tests.test_user_preprocessed_features(preprocessed_user_fts)
+        # basic_tests.test_user_preprocessed_features(preprocessed_user_fts)
 
         ids_to_dataset = {news_id: 'train' for news_id in train_ids}
         ids_to_dataset.update({news_id: 'val' for news_id in val_ids})
@@ -109,9 +109,8 @@ class DatasetBuilder:
                     dataset[ids_to_dataset[news_id]].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
 
                 elif dataset_type == "sequential":
-                    y = torch.tensor(utils.to_label(label))
-                    ordered_edges = sorted(edges, key=lambda x: x[2])
-                    sequential_data = torch.tensor([node_features[edge[1]] for edge in ordered_edges])
+                    y = utils.to_label(label)
+                    sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
                     dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                     # print(sequential_data.mean(dim=0))
                     # print("label was {}".format(label))
@@ -395,7 +394,7 @@ class DatasetBuilder:
                                   time_out,
                                   user_in,
                                   user_out])
-
+                    # edges appear in the order we want
         return x, edges
 
 
