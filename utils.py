@@ -35,14 +35,17 @@ def standardize_and_turn_tensor(seq_data_preprocessed, standardize = True):
     stds = seq_tensor.std(dim=(0, 1), keepdim=True)
     return (seq_tensor - means) / stds if standardize else seq_tensor
 
+def int_or_root(e):
+    return e if e == 'ROOT' else int(e)
 
 def parse_edge_line(line):
     orig, dest = line.split("->")
     orig_list = orig.split("'")
     dest_list = dest.split("'")
 
-    tweet_in, tweet_out = int(orig_list[3]), int(dest_list[3])
-    user_in, user_out = int(orig_list[1]), int(dest_list[1])
+    tweet_in, tweet_out = int_or_root(orig_list[3]), int_or_root(dest_list[3])
+    user_in, user_out = int_or_root(orig_list[1]), int_or_root(dest_list[1])
+
     time_in, time_out = float(orig_list[5]), float(dest_list[5])
     return tweet_in, tweet_out, user_in, user_out, time_in, time_out
 
