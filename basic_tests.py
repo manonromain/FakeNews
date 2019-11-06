@@ -6,8 +6,6 @@
 ### STILL CHANGE A LOT
 
 import random
-from dataset import DatasetBuilder
-
 
 def test_user_preprocessed_features(preprocessed_user_fts):
 
