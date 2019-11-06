@@ -38,11 +38,13 @@ class GNNStack(torch.nn.Module):
         super(GNNStack, self).__init__()
         conv_model = self.build_conv_model(args.model_type)
         self.convs = nn.ModuleList()
+        self.batchnorm_layers = nn.ModuleList()
         self.convs.append(conv_model(input_dim, hidden_dim))
+        self.batchnorm_layers.append(nn.BatchNorm1d(hidden_dim))
         assert (args.num_layers >= 1), 'Number of layers is not >=1'
         for l in range(args.num_layers-1):
             self.convs.append(conv_model(hidden_dim, hidden_dim))
-
+            self.batchnorm_layers.append(nn.BatchNorm1d(hidden_dim))
         # post-message-passing
         self.post_mp = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim), nn.Dropout(args.dropout),
@@ -63,9 +65,10 @@ class GNNStack(torch.nn.Module):
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
-        for conv in self.convs:
+        for i, conv in enumerate(self.convs):
             x = conv(x, edge_index)
             x = F.relu(x)
+            x = self.batchnorm_layers[i](x)
             x = F.dropout(x, self.dropout, training=self.training)  # N x embedding size
         x = pyg_nn.global_max_pool(x, batch)
 

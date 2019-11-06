@@ -15,8 +15,8 @@ import numpy as np
 def train(dataset, args):
 
     # Loading dataset
-    dataset_builder = DatasetBuilder(dataset)
-    datasets = dataset_builder.create_dataset()
+    dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary)
+    datasets = dataset_builder.create_dataset(standardize_features=False)
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
     test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
@@ -77,18 +77,18 @@ def train(dataset, args):
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
-            "epoch_loss": epoch_loss / len(data_loader),
+            "epoch_loss": epoch_loss / len(train_data_loader),
             "global_step": global_step
         }
         torch.save(checkpoint, checkpoint_path)
-        print("epoch", epoch, "loss:", epoch_loss / len(data_loader))
+        print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
 
         # Evaluation on the training set 
         model.eval()
         correct = 0
         n_samples = 0
         with torch.no_grad():
-            for batch in data_loader:
+            for batch in train_data_loader:
                 _, pred = model(batch).max(dim=1)
                 correct += float(pred.eq(batch.y).sum().item())
                 n_samples += len(batch.y)
@@ -113,6 +113,7 @@ def train(dataset, args):
 
 
 if __name__ == "__main__":
+    os.environ['KMP_DUPLICATE_LIB_OK']='True'
     parser = argparse.ArgumentParser(description='Train the graph network.')
     parser.add_argument('dataset', choices=["twitter15", "twitter16"],
                     help='Training dataset', default="twitter15")
@@ -128,6 +129,8 @@ if __name__ == "__main__":
                     help='Model type for GNNStack')
     parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch_size')
+    parser.add_argument('--only_binary', action='store_true',
+                    help='Reduces the problem to binary classification')
     parser.add_argument('--exp_name', default="default",
                     help="Name of experiment - different names will log in different tfboards and restore different models")
     args = parser.parse_args()
