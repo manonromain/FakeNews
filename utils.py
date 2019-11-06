@@ -2,15 +2,50 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import glob
+import torch
 
+
+def preprocess_sequences_to_fixed_len(seq_data, cap_len, features_dim):
+    X = [x for x,y in seq_data]
+    results = []
+    count_oversampling = 0
+    idx_removed = []
+    for i, sequence in enumerate(X):
+        if len(sequence.shape) >= 2:
+            len_seq = sequence.shape[0]
+            if len_seq < cap_len:
+                indexes_oversampled = np.random.choice(len_seq, cap_len - len_seq)
+                sequence = np.concatenate((sequence, sequence[indexes_oversampled, :]), 0)
+                count_oversampling += 1
+            else:
+                sequence = sequence[:cap_len, :]
+            results.append(sequence)
+        else:
+            idx_removed.append(i)
+    results = np.array(results, dtype=float)
+    print(f"Fixed-length preprocessing: lost {len(idx_removed)} sequences that were unit-sized, oversampled {count_oversampling} sequences")
+    assert len(idx_removed) == (len(X) - results.shape[0])
+    return results, idx_removed
+
+
+def standardize_and_turn_tensor(seq_data_preprocessed, standardize = True):
+    print(f"Shape of input seq data is ndarry of shape {seq_data_preprocessed.shape}")
+    seq_tensor = torch.from_numpy(seq_data_preprocessed)
+    means = seq_tensor.mean(dim=(0, 1), keepdim=True)
+    stds = seq_tensor.std(dim=(0, 1), keepdim=True)
+    return (seq_tensor - means) / stds if standardize else seq_tensor
+
+def int_or_root(e):
+    return e if e == 'ROOT' else int(e)
 
 def parse_edge_line(line):
     orig, dest = line.split("->")
     orig_list = orig.split("'")
     dest_list = dest.split("'")
 
-    tweet_in, tweet_out = int(orig_list[3]), int(dest_list[3])
-    user_in, user_out = int(orig_list[1]), int(dest_list[1])
+    tweet_in, tweet_out = int_or_root(orig_list[3]), int_or_root(dest_list[3])
+    user_in, user_out = int_or_root(orig_list[1]), int_or_root(dest_list[1])
+
     time_in, time_out = float(orig_list[5]), float(dest_list[5])
     return tweet_in, tweet_out, user_in, user_out, time_in, time_out
 

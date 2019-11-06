@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 
 DATA_DIR = "rumor_detection_acl2017"
 
+import basic_tests
 
 class DatasetBuilder:
 
@@ -80,6 +81,8 @@ class DatasetBuilder:
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
+        
+        # basic_tests.test_user_preprocessed_features(preprocessed_user_fts)
 
         ids_to_dataset = {news_id: 'train' for news_id in train_ids}
         ids_to_dataset.update({news_id: 'val' for news_id in val_ids})
@@ -105,10 +108,13 @@ class DatasetBuilder:
                     edge_index = torch.tensor(edge_index).t().contiguous()
                     dataset[ids_to_dataset[news_id]].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
 
+                    # Uncomment for test, to see if graphs are well created
+                    # if news_id in [580320684305416192, 387021726007042051]:
+                    #     basic_tests.inspect_graph(dataset[ids_to_dataset[news_id]][-1], news_id)
+
                 elif dataset_type == "sequential":
-                    y = torch.tensor(utils.to_label(label))
-                    ordered_edges = sorted(edges, key=lambda x: x[2])
-                    sequential_data = torch.tensor([node_features[edge[1]] for edge in ordered_edges])
+                    y = utils.to_label(label)
+                    sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
                     dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                     # print(sequential_data.mean(dim=0))
                     # print("label was {}".format(label))
@@ -364,46 +370,67 @@ class DatasetBuilder:
         # TODO kept previous line for backward compatibility but next line has the correct name
         self.num_node_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
 
+        # First run to get the ROOT line and shift in time (if there is one)
+        time_shift = 0 
         with open(tree_file_name, "rt") as tree_file:
             for line in tree_file.readlines():
+                tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
+                if time_out < 0 and time_shift == 0: 
+                    # if buggy dataset, and we haven't found the time_shift yet
+                    time_shift = -time_out
                 if "ROOT" in line:
+                    node_id_to_count[(tweet_out, user_out)] = 0
+                    features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
+                    x.append(features_node)
+                    count += 1
+                    break
+        
+        if count == 0:
+            raise ValueError(f"Didn't find ROOT... File {tree_file_name} is corruped")
+
+        with open(tree_file_name, "rt") as tree_file:
+
+            current_time_out = 0
+            for line in tree_file.readlines():
+
+                if 'ROOT' in line:
                     continue
 
-                tweet_in, tweet_out, user_in, user_out, time_in, time_out = utils.parse_edge_line(line)
-                # if user_out == 1097099569:
-                #     print(user_fts[user_out])
+                tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
+                time_out += time_shift #fix buggy dataset
+                assert time_out >= 0
 
-                if (self.time_cut is None) or (time_out >= 0 and time_out <= self.time_cut):
-                    # Add orig if unseen
-                    if (tweet_in, user_in) not in node_id_to_count:
-                        node_id_to_count[(tweet_in, user_in)] = count
-                        features_node = agglomerate_features(tweet_fts[tweet_in], user_fts[user_in])
-                        x.append(features_node)
-                        count += 1
+                if (self.time_cut is None) or (time_out <= self.time_cut):
 
-                    # Add dest if unseen
+                    # Add dest if unseen. First line with ROOT adds the original tweet.
                     if (tweet_out, user_out) not in node_id_to_count:
                         node_id_to_count[(tweet_out, user_out)] = count
                         features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
                         x.append(features_node)
                         count += 1
 
-                    # Add edge
-                    edges.append([node_id_to_count[(tweet_in, user_in)],
-                                  node_id_to_count[(tweet_out, user_out)],
-                                  time_out,
-                                  user_in,
-                                  user_out])
-                    # if user_out == 1097099569:
-                    #     print(x[node_id_to_count[(tweet_out, user_out)]])
+                    # Remove some buggy lines (i.e. duplicated or make no sense)
+                    potential_edge = [
+                        node_id_to_count[(tweet_in, user_in)],
+                        node_id_to_count[(tweet_out, user_out)],
+                        time_out,
+                        user_in,
+                        user_out
+                    ]
+                    if time_out >= current_time_out and potential_edge not in edges:
+                        current_time_out = time_out
+                        edges.append(potential_edge)
 
         return x, edges
 
 
 if __name__ == "__main__":
-    data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
-    dataset = data_builder.create_dataset(dataset_type="sequential")
+    data_builder = DatasetBuilder("twitter15", time_cutoff=None, only_binary=False)
+    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=False)
+
+    # data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
+    # dataset = data_builder.create_dataset(dataset_type="sequential", standardize_features=False)
     # import pdb;
     # pdb.set_trace()
-    data_builder = DatasetBuilder("twitter16")
-    data_builder.create_dataset(dataset_type="graph")
+    # data_builder = DatasetBuilder("twitter16")
+    # data_builder.create_dataset(dataset_type="graph")
