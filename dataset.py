@@ -19,7 +19,7 @@ import basic_tests
 
 class DatasetBuilder:
 
-    def __init__(self, dataset="twitter15", only_binary=True, time_cutoff=None):
+    def __init__(self, dataset="twitter15", only_binary=False, time_cutoff=None):
 
         self.dataset = dataset
 
@@ -41,7 +41,7 @@ class DatasetBuilder:
         else:
             print("No time consideration")
 
-    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False):
+    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio = 1):
         """
         Args:
             dataset_type:str. Has to be "graph", "sequential" or "raw"
@@ -90,41 +90,45 @@ class DatasetBuilder:
 
         dataset = {'train': [], 'val': [], 'test': []}
 
-        for tree_file_name in trees_to_parse:
+        trees = []
 
+        for tree_file_name in trees_to_parse:
             news_id = utils.get_root_id(tree_file_name)
             label = labels[news_id]
-
             if (not self.only_binary) or (label in ['false', 'true']):
-
                 node_features, edges = self.build_tree(tree_file_name, tweet_fts=preprocessed_tweet_fts,
                                                        user_fts=preprocessed_user_fts)
+                trees.append((news_id, label, node_features, edges))
 
-                if dataset_type == "graph":
-                    x = torch.tensor(node_features, dtype=torch.float32)
-                    y = torch.tensor(utils.to_label(label))
-                    edge_index = np.array([edge[:2] for edge in edges],
-                                          dtype=int)  # change if you want the time somewhere
-                    edge_index = torch.tensor(edge_index).t().contiguous()
-                    if on_gpu:
-                        data_point.to(torch.device('cuda'))
-                    data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
-                    dataset[ids_to_dataset[news_id]].append(data_point)
+        self.oversample(trees, ids_to_dataset, ratio = oversampling_ratio)
 
-                    # Uncomment for test, to see if graphs are well created
-                    # if news_id in [580320684305416192, 387021726007042051]:
-                    #     basic_tests.inspect_graph(dataset[ids_to_dataset[news_id]][-1], news_id)
+        for news_id, label, node_features, edges in trees:
 
-                elif dataset_type == "sequential":
-                    y = utils.to_label(label)
-                    sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
-                    dataset[ids_to_dataset[news_id]].append([sequential_data, y])
-                    # print(sequential_data.mean(dim=0))
-                    # print("label was {}".format(label))
-                elif dataset_type == "raw":
-                    dataset[ids_to_dataset[news_id]].append(
-                        [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
-                         edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
+            if dataset_type == "graph":
+                x = torch.tensor(node_features, dtype=torch.float32)
+                y = torch.tensor(utils.to_label(label))
+                edge_index = np.array([edge[:2] for edge in edges],
+                                        dtype=int)  # change if you want the time somewhere
+                edge_index = torch.tensor(edge_index).t().contiguous()
+                data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
+                if on_gpu:
+                    data_point.to(torch.device("cuda"))
+                dataset[ids_to_dataset[news_id]].append(data_point)
+
+                # Uncomment for test, to see if graphs are well created
+                # if news_id in [580320684305416192, 387021726007042051]:
+                #     basic_tests.inspect_graph(dataset[ids_to_dataset[news_id]][-1], news_id)
+
+            elif dataset_type == "sequential":
+                y = utils.to_label(label)
+                sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
+                dataset[ids_to_dataset[news_id]].append([sequential_data, y])
+                # print(sequential_data.mean(dim=0))
+                # print("label was {}".format(label))
+            elif dataset_type == "raw":
+                dataset[ids_to_dataset[news_id]].append(
+                    [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
+                        edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -425,6 +429,74 @@ class DatasetBuilder:
                         edges.append(potential_edge)
 
         return x, edges
+
+
+    def oversample(self, trees, ids_to_dataset, ratio=1):
+        """ Creates and adds new samples to trees.
+
+        The way it does it is:
+        while ratio is not reached:
+            take a random tree in train, and check it is big enough
+            cut it at a random max_time
+            slighly change features
+            
+
+        Args:
+            trees: (
+                news_id:int, 
+                label:int, 
+                node_features: list:np-arrays,
+                edges:(node_id:int, node_id, time_out, user_in, user_out)
+            )
+            ids_to_dataset: dict(id:int -> dataset:str between 'train', 'test', 'val)
+            ratio: float which represents #(train examples after oversampling)/#(train examples before oversampling)
+                Must be greater or equal to 1
+        
+        Retuns:
+            trees: same format, but more elements
+        """
+        assert ratio >= 1
+
+        print("Oversampling...")
+
+        initial_nb_train_examples = sum([1 if val == 'train' else 0 
+                                        for val in ids_to_dataset.values()])
+        current_nb_train_examples = initial_nb_train_examples
+        random.seed(a=64)
+
+        print(f"Before oversampling: {len(trees)} trees, {initial_nb_train_examples} train trees")
+
+        while current_nb_train_examples / initial_nb_train_examples < ratio:
+
+            # Pick a tree in train set
+            tree_number = random.randint(0, len(trees)-1)
+            news_id, label, node_features, edges = trees[tree_number]
+            if ids_to_dataset[news_id]!='train' or len(edges) < 50:
+                continue
+
+            # Modify it -> cut a part of it
+            r = random.random()
+            while r<0.8:
+                r = random.random()
+            new_edges = edges[:int(r*len(edges))]
+
+            last_node = max([e[0] for e in new_edges] + [e[1] for e in new_edges])
+            new_node_features = node_features[:(last_node+1)]
+
+            # Slightly change the features
+            for node_ft_array in new_node_features:
+                for i in range(len(node_ft_array)):
+                    if node_ft_array[i] > 10: #basically, if it is not a categorical variable
+                        random_value = random.random()
+                        node_ft_array[i] += (random_value - 0.5) * 2 * (node_ft_array[i] / 50)
+
+            # Add the modified version to the existing trees
+            # The new id will be current_nb_train_examples+1000
+            trees.append((current_nb_train_examples+1000, label, new_node_features, new_edges))
+            ids_to_dataset[current_nb_train_examples+1000] = 'train'
+            current_nb_train_examples += 1
+
+        print(f"After oversampling: {len(trees)} trees, {current_nb_train_examples} train trees")
 
 
 if __name__ == "__main__":
