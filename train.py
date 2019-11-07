@@ -14,9 +14,10 @@ import numpy as np
 
 def train(dataset, args):
 
+    on_gpu = torch.cuda.is_available()
     # Loading dataset
     dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary)
-    datasets = dataset_builder.create_dataset(standardize_features=False)
+    datasets = dataset_builder.create_dataset(standardize_features=False, on_gpu=on_gpu)
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
     test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
@@ -29,6 +30,8 @@ def train(dataset, args):
     # Setting up model
     model = GNNStack(dataset_builder.number_of_features, 64, dataset_builder.num_classes, args)
     # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
+    if on_gpu:
+        model.cuda()
 
     # Tensorboard logging
     log_dir = os.path.join("logs", args.exp_name)
@@ -82,33 +85,60 @@ def train(dataset, args):
         }
         torch.save(checkpoint, checkpoint_path)
         print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
+        if epoch%10==0:
+            # Evaluation on the training set 
+            model.eval()
+            correct = 0
+            n_samples = 0
+            samples_per_label = np.zeros(dataset_builder.num_classes)
+            pred_per_label = np.zeros(dataset_builder.num_classes)
+            correct_per_label = np.zeros(dataset_builder.num_classes)
+            with torch.no_grad():
+                for batch in train_data_loader:
+                    _, pred = model(batch).max(dim=1)
+                    correct += float(pred.eq(batch.y).sum().item())
+                    for i in range(dataset_builder.num_classes):
+                        batch_i = batch.y.eq(i)
+                        pred_i = pred.eq(i)
+                        samples_per_label[i] += batch_i.sum().item()
+                        pred_per_label[i] += pred_i.sum().item()
+                        correct_per_label[i] += (batch_i*pred_i).sum().item()
+                    n_samples += len(batch.y)
+            acc = correct / n_samples
+            acc_per_label = correct_per_label / samples_per_label
+            rec_per_label = correct_per_label / pred_per_label
+            train_writer.add_scalar("Accuracy", acc, global_step)
+            for i in range(dataset_builder.num_classes):
+                train_writer.add_scalar("Accuracy_{}".format(i), acc_per_label[i], global_step)
+                train_writer.add_scalar("Recall_{}".format(i), rec_per_label[i], global_step)
+            print('Training accuracy: {:.4f}'.format(acc))
 
-        # Evaluation on the training set 
-        model.eval()
-        correct = 0
-        n_samples = 0
-        with torch.no_grad():
-            for batch in train_data_loader:
-                _, pred = model(batch).max(dim=1)
-                correct += float(pred.eq(batch.y).sum().item())
-                n_samples += len(batch.y)
-        acc = correct / n_samples
-        train_writer.add_scalar("Accuracy", acc, global_step)
-        print('Training accuracy: {:.4f}'.format(acc))
-
-        # Evaluation on the validation set 
-        model.eval()
-        correct = 0
-        n_samples = 0
-        with torch.no_grad():
-            for batch in val_data_loader:
-                _, pred = model(batch).max(dim=1)
-                #print(pred, batch.y)
-                correct += float(pred.eq(batch.y).sum().item())
-                n_samples += len(batch.y)
-        acc = correct / n_samples
-        val_writer.add_scalar("Accuracy", acc, global_step)
-        print('Validation accuracy: {:.4f}'.format(acc))
+            # Evaluation on the validation set 
+            model.eval()
+            correct = 0
+            n_samples = 0
+            samples_per_label = np.zeros(dataset_builder.num_classes)
+            pred_per_label = np.zeros(dataset_builder.num_classes)
+            correct_per_label = np.zeros(dataset_builder.num_classes)
+            with torch.no_grad():
+                for batch in val_data_loader:
+                    _, pred = model(batch).max(dim=1)
+                    correct += float(pred.eq(batch.y).sum().item())
+                    for i in range(dataset_builder.num_classes):
+                        batch_i = batch.y.eq(i)
+                        pred_i = pred.eq(i)
+                        samples_per_label[i] += batch_i.sum().item()
+                        pred_per_label[i] += pred_i.sum().item()
+                        correct_per_label[i] += (batch_i*pred_i).sum().item()
+                    n_samples += len(batch.y)
+            acc = correct / n_samples
+            acc_per_label = correct_per_label / samples_per_label
+            rec_per_label = correct_per_label / pred_per_label
+            val_writer.add_scalar("Accuracy", acc, global_step)
+            for i in range(dataset_builder.num_classes):
+                val_writer.add_scalar("Accuracy_{}".format(i), acc_per_label[i], global_step)
+                val_writer.add_scalar("Recall_{}".format(i), rec_per_label[i], global_step)
+            print('Validation accuracy: {:.4f}'.format(acc))
     return
 
 
