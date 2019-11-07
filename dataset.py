@@ -41,7 +41,7 @@ class DatasetBuilder:
         else:
             print("No time consideration")
 
-    def create_dataset(self, dataset_type="graph", standardize_features=True):
+    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False):
         """
         Args:
             dataset_type:str. Has to be "graph", "sequential" or "raw"
@@ -81,7 +81,7 @@ class DatasetBuilder:
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
-        
+
         # basic_tests.test_user_preprocessed_features(preprocessed_user_fts)
 
         ids_to_dataset = {news_id: 'train' for news_id in train_ids}
@@ -106,7 +106,10 @@ class DatasetBuilder:
                     edge_index = np.array([edge[:2] for edge in edges],
                                           dtype=int)  # change if you want the time somewhere
                     edge_index = torch.tensor(edge_index).t().contiguous()
-                    dataset[ids_to_dataset[news_id]].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+                    if on_gpu:
+                        data_point.to(torch.device('cuda'))
+                    data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
+                    dataset[ids_to_dataset[news_id]].append(data_point)
 
                     # Uncomment for test, to see if graphs are well created
                     # if news_id in [580320684305416192, 387021726007042051]:
