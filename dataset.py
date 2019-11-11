@@ -414,16 +414,21 @@ class DatasetBuilder:
                         count += 1
 
                     # Remove some buggy lines (i.e. duplicated or make no sense)
-                    potential_edge = [
-                        node_id_to_count[(tweet_in, user_in)],
-                        node_id_to_count[(tweet_out, user_out)],
-                        time_out,
-                        user_in,
-                        user_out
-                    ]
-                    if time_out >= current_time_out and potential_edge not in edges:
-                        current_time_out = time_out
-                        edges.append(potential_edge)
+                    if time_out >= current_time_out:
+                        potential_edge = [
+                            node_id_to_count[(tweet_in, user_in)],
+                            node_id_to_count[(tweet_out, user_out)],
+                            time_out,
+                            user_in,
+                            user_out
+                        ]
+                        if potential_edge not in edges:
+                            current_time_out = time_out
+                            edges.append(potential_edge)
+                
+                if (self.time_cut is not None) and (time_out > self.time_cut): 
+                    # We've seen all interesting edges
+                    break
 
         return x, edges
 
