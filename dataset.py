@@ -5,7 +5,6 @@ from collections import defaultdict
 
 import numpy as np
 import torch
-import torch_geometric
 
 import utils
 from text_preprocessing import preprocess_tweets
@@ -16,6 +15,7 @@ from sklearn.preprocessing import StandardScaler
 DATA_DIR = "rumor_detection_acl2017"
 
 import basic_tests
+
 
 class DatasetBuilder:
 
@@ -41,7 +41,7 @@ class DatasetBuilder:
         else:
             print("No time consideration")
 
-    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio = 1):
+    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio=1):
         """
         Args:
             dataset_type:str. Has to be "graph", "sequential" or "raw"
@@ -100,15 +100,16 @@ class DatasetBuilder:
                                                        user_fts=preprocessed_user_fts)
                 trees.append((news_id, label, node_features, edges))
 
-        self.oversample(trees, ids_to_dataset, ratio = oversampling_ratio)
+        self.oversample(trees, ids_to_dataset, ratio=oversampling_ratio)
 
         for news_id, label, node_features, edges in trees:
 
             if dataset_type == "graph":
+                import torch_geometric
                 x = torch.tensor(node_features, dtype=torch.float32)
                 y = torch.tensor(utils.to_label(label))
                 edge_index = np.array([edge[:2] for edge in edges],
-                                        dtype=int)  # change if you want the time somewhere
+                                      dtype=int)  # change if you want the time somewhere
                 edge_index = torch.tensor(edge_index).t().contiguous()
                 data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
                 if on_gpu:
@@ -121,14 +122,15 @@ class DatasetBuilder:
 
             elif dataset_type == "sequential":
                 y = utils.to_label(label)
-                sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
+                sequential_data = np.array(
+                    node_features)  # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
                 dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                 # print(sequential_data.mean(dim=0))
                 # print("label was {}".format(label))
             elif dataset_type == "raw":
                 dataset[ids_to_dataset[news_id]].append(
                     [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
-                        edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
+                     edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -345,7 +347,7 @@ class DatasetBuilder:
                         if "ROOT" in line:
                             continue
                         tweet_in, tweet_out, user_in, user_out, _, _ = utils.parse_edge_line(line)
-                        user_ids_in_train.add(user_in) #user_ids_in_train may be bigger
+                        user_ids_in_train.add(user_in)  # user_ids_in_train may be bigger
                         user_ids_in_train.add(user_out)
                         tweet_ids_in_train.add(tweet_in)
                         tweet_ids_in_train.add(tweet_out)
@@ -378,11 +380,11 @@ class DatasetBuilder:
         self.num_node_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
 
         # First run to get the ROOT line and shift in time (if there is one)
-        time_shift = 0 
+        time_shift = 0
         with open(tree_file_name, "rt") as tree_file:
             for line in tree_file.readlines():
                 tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
-                if time_out < 0 and time_shift == 0: 
+                if time_out < 0 and time_shift == 0:
                     # if buggy dataset, and we haven't found the time_shift yet
                     time_shift = -time_out
                 if "ROOT" in line:
@@ -391,9 +393,9 @@ class DatasetBuilder:
                     x.append(features_node)
                     count += 1
                     break
-        
+
         if count == 0:
-            raise ValueError(f"Didn't find ROOT... File {tree_file_name} is corruped")
+            raise ValueError(f"Didn't find ROOT... File {tree_file_name} is corrupted")
 
         with open(tree_file_name, "rt") as tree_file:
 
@@ -404,7 +406,7 @@ class DatasetBuilder:
                     continue
 
                 tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
-                time_out += time_shift #fix buggy dataset
+                time_out += time_shift  # fix buggy dataset
                 assert time_out >= 0
 
                 if (self.time_cut is None) or (time_out <= self.time_cut):
@@ -428,13 +430,12 @@ class DatasetBuilder:
                         if potential_edge not in edges:
                             current_time_out = time_out
                             edges.append(potential_edge)
-                
-                if (self.time_cut is not None) and (time_out > self.time_cut): 
+
+                if (self.time_cut is not None) and (time_out > self.time_cut):
                     # We've seen all interesting edges
                     break
 
         return x, edges
-
 
     def oversample(self, trees, ids_to_dataset, ratio=1):
         """ Creates and adds new samples to trees.
@@ -464,8 +465,8 @@ class DatasetBuilder:
 
         print("Oversampling...")
 
-        initial_nb_train_examples = sum([1 if val == 'train' else 0 
-                                        for val in ids_to_dataset.values()])
+        initial_nb_train_examples = sum([1 if val == 'train' else 0
+                                         for val in ids_to_dataset.values()])
         current_nb_train_examples = initial_nb_train_examples
         random.seed(a=64)
 
@@ -474,31 +475,31 @@ class DatasetBuilder:
         while current_nb_train_examples / initial_nb_train_examples < ratio:
 
             # Pick a tree in train set
-            tree_number = random.randint(0, len(trees)-1)
+            tree_number = random.randint(0, len(trees) - 1)
             news_id, label, node_features, edges = trees[tree_number]
-            if ids_to_dataset[news_id]!='train' or len(edges) < 50:
+            if ids_to_dataset[news_id] != 'train' or len(edges) < 50:
                 continue
 
             # Modify it -> cut a part of it
             r = random.random()
-            while r<0.8:
+            while r < 0.8:
                 r = random.random()
-            new_edges = edges[:int(r*len(edges))]
+            new_edges = edges[:int(r * len(edges))]
 
             last_node = max([e[0] for e in new_edges] + [e[1] for e in new_edges])
-            new_node_features = node_features[:(last_node+1)]
+            new_node_features = node_features[:(last_node + 1)]
 
             # Slightly change the features
             for node_ft_array in new_node_features:
                 for i in range(len(node_ft_array)):
-                    if node_ft_array[i] > 10: #basically, if it is not a categorical variable
+                    if node_ft_array[i] > 10:  # basically, if it is not a categorical variable
                         random_value = random.random()
                         node_ft_array[i] += (random_value - 0.5) * 2 * (node_ft_array[i] / 50)
 
             # Add the modified version to the existing trees
             # The new id will be current_nb_train_examples+1000
-            trees.append((current_nb_train_examples+1000, label, new_node_features, new_edges))
-            ids_to_dataset[current_nb_train_examples+1000] = 'train'
+            trees.append((current_nb_train_examples + 1000, label, new_node_features, new_edges))
+            ids_to_dataset[current_nb_train_examples + 1000] = 'train'
             current_nb_train_examples += 1
 
         print(f"After oversampling: {len(trees)} trees, {current_nb_train_examples} train trees")
