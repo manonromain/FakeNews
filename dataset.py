@@ -130,7 +130,7 @@ class DatasetBuilder:
             elif dataset_type == "raw":
                 dataset[ids_to_dataset[news_id]].append(
                     [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
-                     edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
+                     edges])  # edge = [node_index_in, node_index_out, time_out, uid_in, uid_out]
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
