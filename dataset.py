@@ -200,9 +200,6 @@ class DatasetBuilder:
 
         """
 
-        # print(tweet_features)
-        # input()
-
         # TODO: more preprocessing, this is just a beginning.
         if 'created_at' in self.tweet_feature_names:
             for tweet_id in tweet_features.keys():
@@ -402,11 +399,11 @@ class DatasetBuilder:
                     time_shift = -time_out
                 if "ROOT" in line:
                     node_id_to_count[(tweet_out, user_out)] = 0
-                    features_node = np.concatenate(
+                    features_node = np.concatenate([
                         tweet_fts[tweet_out], 
                         user_fts[user_out],
                         np.array([time_out])
-                    )
+                    ])
                     x.append(features_node)
                     count += 1
                     break
@@ -431,10 +428,11 @@ class DatasetBuilder:
                     # Add dest if unseen. First line with ROOT adds the original tweet.
                     if (tweet_out, user_out) not in node_id_to_count:
                         node_id_to_count[(tweet_out, user_out)] = count
-                        features_node = np.concatenate(
+                        features_node = np.concatenate([
                             tweet_fts[tweet_out], 
                             user_fts[user_out],
-                            np.array([time_out]))
+                            np.array([time_out])
+                        ])
                         x.append(features_node)
                         count += 1
 
