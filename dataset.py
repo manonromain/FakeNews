@@ -200,6 +200,9 @@ class DatasetBuilder:
 
         """
 
+        # print(tweet_features)
+        # input()
+
         # TODO: more preprocessing, this is just a beginning.
         if 'created_at' in self.tweet_feature_names:
             for tweet_id in tweet_features.keys():
@@ -211,9 +214,26 @@ class DatasetBuilder:
         # self.n_text_features = len(list(self.text_features.values())[0])
         # print("Tweets tf-idfed in {:3f}s".format(time.time() - start_time))
 
+        # dict_defaults = {
+        #     'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
+        #     'favourites_count': np.median([elt["favourites_count"] for elt in user_features_train_only.values()]),
+        #     'followers_count': np.median([elt["followers_count"] for elt in user_features_train_only.values()]),
+        #     'friends_count': np.median([elt["friends_count"] for elt in user_features_train_only.values()]),
+        #     'geo_enabled': 0,
+        #     'has_description': 0,
+        #     'len_name': np.median([elt["len_name"] for elt in user_features_train_only.values()]),
+        #     'len_screen_name': np.median([elt["len_screen_name"] for elt in user_features_train_only.values()]),
+        #     'listed_count': np.median([elt["listed_count"] for elt in user_features_train_only.values()]),
+        #     'statuses_count': np.median([elt["statuses_count"] for elt in user_features_train_only.values()]),
+        #     'verified': 0
+        # }
+
+        dict_defaults = {}
+
         def default_tweet_features():
-            # return np.array([utils.from_date_text_to_timestamp('2016-01-01 00:00:01')])
-            return np.array([])
+            """ Return np array of default features sorted by alphabetic order """
+            return np.array([val for key, val in
+                             sorted(dict_defaults.items(), key=lambda x: x[0])])
 
         # new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
         new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
@@ -367,17 +387,10 @@ class DatasetBuilder:
             edge_index: list (nb_edges)[node_in_id, node_out_id, time_out]
         """
 
-        def agglomerate_features(node_tweet_fts, node_user_fts):
-            return np.concatenate([node_tweet_fts, node_user_fts])
-
         edges = []  #
         x = []
         node_id_to_count = {}  # Dict tweet id, user id -> node id, which starts at 0 # changed as before, a tweet can be seen a first time with a given uid then a second time with a different one
         count = 0
-
-        self.number_of_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
-        # TODO kept previous line for backward compatibility but next line has the correct name
-        self.num_node_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
 
         # First run to get the ROOT line and shift in time (if there is one)
         time_shift = 0
@@ -389,7 +402,11 @@ class DatasetBuilder:
                     time_shift = -time_out
                 if "ROOT" in line:
                     node_id_to_count[(tweet_out, user_out)] = 0
-                    features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
+                    features_node = np.concatenate(
+                        tweet_fts[tweet_out], 
+                        user_fts[user_out],
+                        np.array([time_out])
+                    )
                     x.append(features_node)
                     count += 1
                     break
@@ -414,7 +431,10 @@ class DatasetBuilder:
                     # Add dest if unseen. First line with ROOT adds the original tweet.
                     if (tweet_out, user_out) not in node_id_to_count:
                         node_id_to_count[(tweet_out, user_out)] = count
-                        features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
+                        features_node = np.concatenate(
+                            tweet_fts[tweet_out], 
+                            user_fts[user_out],
+                            np.array([time_out]))
                         x.append(features_node)
                         count += 1
 
@@ -434,6 +454,8 @@ class DatasetBuilder:
                 if (self.time_cut is not None) and (time_out > self.time_cut):
                     # We've seen all interesting edges
                     break
+
+        self.num_node_features = len(x[-1])
 
         return x, edges
 
