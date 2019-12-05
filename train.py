@@ -31,7 +31,7 @@ def train(dataset, args):
     #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.7*len(dataset)):int(0.8*len(dataset))], batch_size=args.batch_size, shuffle=True)
     #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.8*len(dataset)):], batch_size=args.batch_size, shuffle=True)
     # Setting up model
-    model = GNNStack(dataset_builder.number_of_features, 64, dataset_builder.num_classes, args)
+    model = GNNStack(dataset_builder.num_node_features, 64, dataset_builder.num_classes, args)
     # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
     if on_gpu:
         model.cuda()
