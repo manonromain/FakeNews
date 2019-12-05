@@ -110,6 +110,10 @@ class DatasetBuilder:
                 edge_index = np.array([edge[:2] for edge in edges],
                                         dtype=int)  # change if you want the time somewhere
                 edge_index = torch.tensor(edge_index).t().contiguous()
+                if on_gpu:
+                    y.to(torch.device("cuda"))
+                    x.to(torch.device("cuda"))
+                    edge_index.to(torch.device("cuda"))
                 data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
                 if on_gpu:
                     data_point.to(torch.device("cuda"))

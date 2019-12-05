@@ -64,7 +64,7 @@ class GNNStack(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
-
+        batch = batch.to(x.device)
         for i, conv in enumerate(self.convs):
             x = conv(x, edge_index)
             x = F.relu(x)
