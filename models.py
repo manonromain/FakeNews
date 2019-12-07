@@ -35,24 +35,26 @@ class FirstNet(torch.nn.Module):
 
 class GNNStack(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, args):
+
+        self.dropout = float(args.dropout)
+        self.num_layers = int(args.num_layers)
+
         super(GNNStack, self).__init__()
         conv_model = self.build_conv_model(args.model_type)
         self.convs = nn.ModuleList()
         self.batchnorm_layers = nn.ModuleList()
         self.convs.append(conv_model(input_dim, hidden_dim))
         self.batchnorm_layers.append(nn.BatchNorm1d(hidden_dim))
-        assert (args.num_layers >= 1), 'Number of layers is not >=1'
-        for l in range(args.num_layers-1):
+        assert (self.num_layers >= 1), 'Number of layers is not >=1'
+        for l in range(self.num_layers-1):
             self.convs.append(conv_model(hidden_dim, hidden_dim))
             self.batchnorm_layers.append(nn.BatchNorm1d(hidden_dim))
+
         # post-message-passing
         self.post_mp = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim), nn.Dropout(args.dropout),
-            nn.Linear(hidden_dim, output_dim))
+            nn.Linear(3*hidden_dim, 3*hidden_dim), nn.Dropout(self.dropout),
+            nn.Linear(3*hidden_dim, output_dim))
 
-
-        self.dropout = args.dropout
-        self.num_layers = args.num_layers
 
     def build_conv_model(self, model_type):
         if model_type == 'GCN':
@@ -70,8 +72,16 @@ class GNNStack(torch.nn.Module):
             x = F.relu(x)
             x = self.batchnorm_layers[i](x)
             x = F.dropout(x, self.dropout, training=self.training)  # N x embedding size
-        x = pyg_nn.global_max_pool(x, batch)
 
+        # concatenate max_pool, mean_pool and embedding of first node (i.e. the news root)
+        x1 = pyg_nn.global_max_pool(x, batch) # shape batch_size * embedding size
+        x2 = pyg_nn.global_mean_pool(x, batch)
+
+        batch_size = x1.size(0)
+        indices_first_nodes = [(data.batch == i).nonzero()[0] for i in range(batch_size)]
+        x3 = x[indices_first_nodes, :]
+
+        x = torch.cat((x1, x2, x3), dim=1)
         x = self.post_mp(x)
 
         return F.log_softmax(x, dim=1)
