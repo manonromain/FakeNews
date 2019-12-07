@@ -85,7 +85,7 @@ def train(dataset, args):
         }
         torch.save(checkpoint, checkpoint_path)
         print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
-        if epoch%10==0:
+        if epoch%1==0:
             # Evaluation on the training set 
             model.eval()
             correct = 0

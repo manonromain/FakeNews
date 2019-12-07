@@ -290,13 +290,13 @@ class DatasetBuilder:
             ]
             # print(features.keys())
             for int_feature in integer_features:
-                new_features[int_feature] = int(features[int_feature])
+                new_features[int_feature] = float(features[int_feature])
 
-            new_features["verified"] = int(features['verified'] == 'True')
-            new_features["geo_enabled"] = int(features['geo_enabled'] == 'True')
-            new_features['has_description'] = int(len(features['description']) > 0)
-            new_features['len_name'] = len(features['name'])
-            new_features['len_screen_name'] = len(features['screen_name'])
+            new_features["verified"] = float(features['verified'] == 'True')
+            new_features["geo_enabled"] = float(features['geo_enabled'] == 'True')
+            new_features['has_description'] = float(len(features['description']) > 0)
+            new_features['len_name'] = float(len(features['name']))
+            new_features['len_screen_name'] = float(len(features['screen_name']))
 
             user_features[user_id] = new_features
 
@@ -311,8 +311,6 @@ class DatasetBuilder:
                 "friends_count",
                 "listed_count",
                 "statuses_count",
-                "len_name",
-                "len_screen_name"
             ]:
                 scaler = StandardScaler().fit(
                     np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
@@ -320,11 +318,10 @@ class DatasetBuilder:
 
                 # faster to do this way as we don't have to convert to np arrays
                 mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
-                for key in user_features_train_only.keys():
-                    user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
-
                 for key in user_features.keys():
                     user_features[key][ft] = (user_features[key][ft] - mean) / std
+
+                user_features_train_only = {key: val for key, val in user_features.items() if key in user_ids_in_train}
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
@@ -527,7 +524,7 @@ class DatasetBuilder:
 
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=None, only_binary=False)
-    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=False)
+    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=True)
 
     # data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
     # dataset = data_builder.create_dataset(dataset_type="sequential", standardize_features=False)
