@@ -211,7 +211,7 @@ if __name__ == "__main__":
                     help='Oversampling ratio for data augmentation')
     parser.add_argument('--num_layers', default=2, type=int,
                     help='Number of layers')
-    parser.add_argument('--dropout', default=0.0, type=int,
+    parser.add_argument('--dropout', default=0.0, type=float,
                     help='dropout for GNNStack')
     parser.add_argument('--model_type', default="GAT",
                     help='Model type for GNNStack')
