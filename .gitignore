@@ -8,5 +8,6 @@ logs/
 checkpoints/
 .DS_Store
 .idea
-script_twitter15_.sh
-script_twitter16_.sh
+*.sh
+*.out
+*.csv
