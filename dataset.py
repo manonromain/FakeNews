@@ -19,8 +19,8 @@ import basic_tests
 
 class DatasetBuilder:
 
-    def __init__(self, dataset="twitter15", only_binary=False, time_cutoff=None):
-
+    def __init__(self, dataset="twitter15", only_binary=False, time_cutoff=None, features_to_consider="user_only"):
+        
         self.dataset = dataset
 
         self.dataset_dir = os.path.join(DATA_DIR, dataset)
@@ -40,6 +40,9 @@ class DatasetBuilder:
             print("We consider tweets emitted no later than {}mins after the root tweet".format(self.time_cut))
         else:
             print("No time consideration")
+
+        print("Features that will be considered:", features_to_consider)
+        self.features_to_consider = features_to_consider
 
     def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio=1):
         """
@@ -78,6 +81,9 @@ class DatasetBuilder:
 
         tweet_features = self.load_tweet_features()
         user_features = self.load_user_features()
+
+        if standardize_features:
+            print("Standardizing features")
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
@@ -160,21 +166,14 @@ class DatasetBuilder:
 
         tweet_features = {}
 
+        text_embeddings = np.load("rumor_detection_acl2017/output_bert.npy")
+        
         with open(os.path.join(DATA_DIR, "tweet_features.txt")) as text_file:
             # first line contains column names
             self.tweet_feature_names = text_file.readline().rstrip('\n').split(';')
-            for line in text_file.readlines():
+            for i, line in enumerate(text_file.readlines()):
                 features = line.rstrip('\n').split(";")
-                tweet_features[int(features[0])] = {self.tweet_feature_names[i]: features[i]
-                                                    for i in range(1, len(features))}
-
-        with open(os.path.join(self.dataset_dir, "source_tweets.txt")) as text_file:
-            for line in text_file.readlines():
-                tweet_id, text = line.split("\t")
-                if tweet_id not in tweet_features.keys():
-                    tweet_features[int(tweet_id)] = {'text': text,
-                                                     'created_at': '2016-01-01 00:00:01'}
-                    # TODO: change the date according to if dataset is 2015 or 2016
+                tweet_features[int(features[0])] = {"embedding":text_embeddings[i]}
 
         return tweet_features
 
@@ -204,40 +203,20 @@ class DatasetBuilder:
 
         """
 
-        # TODO: more preprocessing, this is just a beginning.
-        if 'created_at' in self.tweet_feature_names:
-            for tweet_id in tweet_features.keys():
-                tweet_features[tweet_id]['created_at'] = \
-                    utils.from_date_text_to_timestamp(tweet_features[tweet_id]['created_at'])
-
-        # print('running tf-idf')
-        # self.text_features = preprocess_tweets(self.tweet_texts)
-        # self.n_text_features = len(list(self.text_features.values())[0])
-        # print("Tweets tf-idfed in {:3f}s".format(time.time() - start_time))
-
-        # dict_defaults = {
-        #     'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
-        #     'favourites_count': np.median([elt["favourites_count"] for elt in user_features_train_only.values()]),
-        #     'followers_count': np.median([elt["followers_count"] for elt in user_features_train_only.values()]),
-        #     'friends_count': np.median([elt["friends_count"] for elt in user_features_train_only.values()]),
-        #     'geo_enabled': 0,
-        #     'has_description': 0,
-        #     'len_name': np.median([elt["len_name"] for elt in user_features_train_only.values()]),
-        #     'len_screen_name': np.median([elt["len_screen_name"] for elt in user_features_train_only.values()]),
-        #     'listed_count': np.median([elt["listed_count"] for elt in user_features_train_only.values()]),
-        #     'statuses_count': np.median([elt["statuses_count"] for elt in user_features_train_only.values()]),
-        #     'verified': 0
-        # }
-
-        dict_defaults = {}
+        dict_defaults = {
+            'embed': np.zeros((768))
+        }
 
         def default_tweet_features():
             """ Return np array of default features sorted by alphabetic order """
             return np.array([val for key, val in
-                             sorted(dict_defaults.items(), key=lambda x: x[0])])
+                             sorted(dict_defaults.items(), key=lambda x: x[0])]).reshape(-1)
 
-        # new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
-        new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
+        # new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
+
+        new_tweet_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]).reshape(-1) 
+                            for key, value in tweet_features.items()}
+
         return defaultdict(default_tweet_features, new_tweet_features)
 
     def preprocess_user_features(self, user_features, user_ids_in_train, standardize_features=True):
@@ -294,13 +273,13 @@ class DatasetBuilder:
             ]
             # print(features.keys())
             for int_feature in integer_features:
-                new_features[int_feature] = int(features[int_feature])
+                new_features[int_feature] = float(features[int_feature])
 
-            new_features["verified"] = int(features['verified'] == 'True')
-            new_features["geo_enabled"] = int(features['geo_enabled'] == 'True')
-            new_features['has_description'] = int(len(features['description']) > 0)
-            new_features['len_name'] = len(features['name'])
-            new_features['len_screen_name'] = len(features['screen_name'])
+            new_features["verified"] = float(features['verified'] == 'True')
+            new_features["geo_enabled"] = float(features['geo_enabled'] == 'True')
+            new_features['has_description'] = float(len(features['description']) > 0)
+            new_features['len_name'] = float(len(features['name']))
+            new_features['len_screen_name'] = float(len(features['screen_name']))
 
             user_features[user_id] = new_features
 
@@ -315,8 +294,6 @@ class DatasetBuilder:
                 "friends_count",
                 "listed_count",
                 "statuses_count",
-                "len_name",
-                "len_screen_name"
             ]:
                 scaler = StandardScaler().fit(
                     np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
@@ -324,11 +301,10 @@ class DatasetBuilder:
 
                 # faster to do this way as we don't have to convert to np arrays
                 mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
-                for key in user_features_train_only.keys():
-                    user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
-
                 for key in user_features.keys():
                     user_features[key][ft] = (user_features[key][ft] - mean) / std
+
+                user_features_train_only = {key: val for key, val in user_features.items() if key in user_ids_in_train}
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
@@ -403,12 +379,8 @@ class DatasetBuilder:
                     time_shift = -time_out
                 if "ROOT" in line:
                     node_id_to_count[(tweet_out, user_out)] = 0
-                    features_node = np.concatenate([
-                        tweet_fts[tweet_out], 
-                        user_fts[user_out],
-                        np.array([time_out])
-                    ])
-                    x.append(features_node)
+                    self.add_node_features_to_x(x, node_id_to_count, tweet_out, user_out, 
+                                                tweet_fts, user_fts, time_out)
                     count += 1
                     break
 
@@ -432,12 +404,8 @@ class DatasetBuilder:
                     # Add dest if unseen. First line with ROOT adds the original tweet.
                     if (tweet_out, user_out) not in node_id_to_count:
                         node_id_to_count[(tweet_out, user_out)] = count
-                        features_node = np.concatenate([
-                            tweet_fts[tweet_out], 
-                            user_fts[user_out],
-                            np.array([time_out])
-                        ])
-                        x.append(features_node)
+                        self.add_node_features_to_x(x, node_id_to_count, tweet_out, user_out, 
+                                                    tweet_fts, user_fts, time_out)
                         count += 1
 
                     # Remove some buggy lines (i.e. duplicated or make no sense)
@@ -460,6 +428,19 @@ class DatasetBuilder:
         self.num_node_features = len(x[-1])
 
         return x, edges
+
+    def add_node_features_to_x(self, x, node_id_to_count, tweet_out, user_out, tweet_fts, user_fts, time_out):
+        if self.features_to_consider == "all":
+            features_node = np.concatenate([
+                tweet_fts[tweet_out], 
+                user_fts[user_out],
+                np.array([time_out])
+            ])
+        elif self.features_to_consider == "text_only":
+            features_node = tweet_fts[tweet_out]
+        else:
+            features_node = user_fts[user_out]
+        x.append(features_node)
 
     def oversample(self, trees, ids_to_dataset, ratio=1):
         """ Creates and adds new samples to trees.
@@ -531,7 +512,7 @@ class DatasetBuilder:
 
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=None, only_binary=False)
-    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=False)
+    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=True)
 
     # data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
     # dataset = data_builder.create_dataset(dataset_type="sequential", standardize_features=False)

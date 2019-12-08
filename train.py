@@ -20,16 +20,12 @@ def train(dataset, args):
         print("Using gpu")
 
     # Loading dataset
-    dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary)
-    datasets = dataset_builder.create_dataset(standardize_features=False, on_gpu=on_gpu, oversampling_ratio=args.oversampling_ratio)
+    dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary, features_to_consider=args.features)
+    datasets = dataset_builder.create_dataset(standardize_features=args.standardize, on_gpu=on_gpu)
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
     test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
-    #dataset = TUDataset(root='/tmp/ENZYMES', name='ENZYMES')
-    #train_data_loader = torch_geometric.data.DataLoader(dataset[:int(0.7*len(dataset))], batch_size=args.batch_size, shuffle=True)
 
-    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.7*len(dataset)):int(0.8*len(dataset))], batch_size=args.batch_size, shuffle=True)
-    #val_data_loader = torch_geometric.data.DataLoader(dataset[int(0.8*len(dataset)):], batch_size=args.batch_size, shuffle=True)
     # Setting up model
     model = GNNStack(dataset_builder.num_node_features, 64, dataset_builder.num_classes, args)
     # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
@@ -50,7 +46,7 @@ def train(dataset, args):
     # Checkpoints
     checkpoint_dir = os.path.join("checkpoints", args.exp_name)
     checkpoint_path = os.path.join(checkpoint_dir, "model.pt")
-    if not os.path.isfile(checkpoint_path):
+    if args.exp_name == "default" or not os.path.isfile(checkpoint_path):
         if not os.path.isdir(checkpoint_dir):
             os.makedirs(checkpoint_dir)
         epoch_ckp = 0
@@ -65,7 +61,7 @@ def train(dataset, args):
         print("Restoring previous model at epoch", epoch_ckp)
 
     # Training phase
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=5e-4)
     for epoch in range(epoch_ckp, epoch_ckp + args.num_epochs):
         model.train()
         epoch_loss = 0
@@ -86,7 +82,7 @@ def train(dataset, args):
             global_step += 1
 
         print("epoch", epoch, "loss:", epoch_loss / len(train_data_loader))
-        if epoch%10==0:
+        if epoch%1==0:
             # Evaluation on the training set 
             model.eval()
             correct = 0
@@ -222,5 +218,10 @@ if __name__ == "__main__":
                     help='Reduces the problem to binary classification')
     parser.add_argument('--exp_name', default="default",
                     help="Name of experiment - different names will log in different tfboards and restore different models")
+    parser.add_argument('--standardize', action='store_true',
+                    help='Standardize features')
+    parser.add_argument('--features', choices=["all", "text_only", "user_only"],
+                    help='Features to consider', default="all")
+   
     args = parser.parse_args()
     train(args.dataset, args)
