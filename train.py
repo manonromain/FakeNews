@@ -20,7 +20,10 @@ def train(dataset, args):
         print("Using gpu")
 
     # Loading dataset
-    dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary, features_to_consider=args.features)
+
+    time_cutoff = None if args.time_cutoff == "None" else int(args.time_cutoff)
+    dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary, features_to_consider=args.features,
+                                    time_cutoff=time_cutoff, seed=args.seed)
     datasets = dataset_builder.create_dataset(standardize_features=args.standardize, on_gpu=on_gpu)
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
@@ -208,7 +211,7 @@ if __name__ == "__main__":
                     help='Oversampling ratio for data augmentation')
     parser.add_argument('--num_layers', default=2, type=int,
                     help='Number of layers')
-    parser.add_argument('--dropout', default=0.0,
+    parser.add_argument('--dropout', default=0.0, type=int,
                     help='dropout for GNNStack')
     parser.add_argument('--model_type', default="GAT",
                     help='Model type for GNNStack')
@@ -222,6 +225,10 @@ if __name__ == "__main__":
                     help='Standardize features')
     parser.add_argument('--features', choices=["all", "text_only", "user_only"],
                     help='Features to consider', default="all")
+    parser.add_argument('--time_cutoff',
+                    help='Time cutoff in mins', default="None")
+    parser.add_argument('--seed', default=64, type=int,
+                    help='Seed for train/val/test split')
    
     args = parser.parse_args()
     train(args.dataset, args)

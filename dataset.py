@@ -19,8 +19,16 @@ import basic_tests
 
 class DatasetBuilder:
 
-    def __init__(self, dataset="twitter15", only_binary=False, time_cutoff=None, features_to_consider="user_only"):
+    def __init__(
+        self, 
+        dataset="twitter15", 
+        only_binary=False, 
+        time_cutoff=None, 
+        features_to_consider="user_only", 
+        seed=64
+    ):
         
+        self.seed = seed
         self.dataset = dataset
 
         self.dataset_dir = os.path.join(DATA_DIR, dataset)
@@ -72,8 +80,8 @@ class DatasetBuilder:
             news_ids_to_consider = [news_id for news_id in news_ids_to_consider
                                     if labels[news_id] in ['false', 'true']]
 
-        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size=0.1, random_state=42)
-        train_ids, test_ids = train_test_split(train_ids, test_size=0.25, random_state=68)
+        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size=0.1, random_state=self.seed)
+        train_ids, test_ids = train_test_split(train_ids, test_size=0.25, random_state=self.seed*7)
         print(f"Len train/val/test {len(train_ids)} {len(val_ids)} {len(test_ids)}")
 
         user_ids_in_train, tweet_ids_in_train = \
