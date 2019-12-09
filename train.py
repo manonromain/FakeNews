@@ -29,8 +29,11 @@ def train(dataset, args):
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
     test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
 
+    print("Number of node features", dataset_builder.num_node_features)
+    print("Dimension of hidden space", args.hidden_dim)
+
     # Setting up model
-    model = GNNStack(dataset_builder.num_node_features, 64, dataset_builder.num_classes, args)
+    model = GNNStack(dataset_builder.num_node_features, args.hidden_dim, dataset_builder.num_classes, args)
     # model = GNNStack(dataset.num_node_features, 32, dataset.num_classes, args)
     if on_gpu:
         model.cuda()
@@ -229,6 +232,8 @@ if __name__ == "__main__":
                     help='Time cutoff in mins', default="None")
     parser.add_argument('--seed', default=64, type=int,
                     help='Seed for train/val/test split')
+    parser.add_argument('--hidden_dim', default=64, type=int,
+                    help='Dimension of hidden space in GCNs')
    
     args = parser.parse_args()
     train(args.dataset, args)
