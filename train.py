@@ -24,7 +24,8 @@ def train(dataset, args):
     time_cutoff = None if args.time_cutoff == "None" else int(args.time_cutoff)
     dataset_builder = DatasetBuilder(dataset, only_binary=args.only_binary, features_to_consider=args.features,
                                     time_cutoff=time_cutoff, seed=args.seed)
-    datasets = dataset_builder.create_dataset(standardize_features=args.standardize, on_gpu=on_gpu)
+    datasets = dataset_builder.create_dataset(standardize_features=args.standardize, 
+                                            on_gpu=on_gpu, oversampling_ratio=args.oversampling_ratio)
     train_data_loader = torch_geometric.data.DataLoader(datasets["train"], batch_size=args.batch_size, shuffle=True)
     val_data_loader = torch_geometric.data.DataLoader(datasets["val"], batch_size=args.batch_size, shuffle=True)
     test_data_loader = torch_geometric.data.DataLoader(datasets["test"], batch_size=args.batch_size, shuffle=True)
