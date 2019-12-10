@@ -170,8 +170,8 @@ if __name__ == "__main__":
     dataset_builder = DatasetBuilder(dataset_selected, only_binary=False, time_cutoff=10000)
     full_dataset = dataset_builder.create_dataset(dataset_type="raw", standardize_features=False)
     train_set = full_dataset['train']
-    # dump_seiz_dataset(train_set, name=dataset_selected)
-    dump_seiz_dataset(full_dataset['val'], name=dataset_selected + '_val')
+    dump_seiz_dataset(train_set, name=dataset_selected)
+     dump_seiz_dataset(full_dataset['val'], name=dataset_selected + '_val')
     dump_seiz_dataset(full_dataset['test'], name=dataset_selected + '_test')
 
     dataset_selected = 'twitter15'
