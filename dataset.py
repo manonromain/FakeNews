@@ -5,7 +5,6 @@ from collections import defaultdict
 
 import numpy as np
 import torch
-import torch_geometric
 
 import utils
 from text_preprocessing import preprocess_tweets
@@ -17,10 +16,19 @@ DATA_DIR = "rumor_detection_acl2017"
 
 import basic_tests
 
+
 class DatasetBuilder:
 
-    def __init__(self, dataset="twitter15", only_binary=False, time_cutoff=None):
-
+    def __init__(
+        self, 
+        dataset="twitter15", 
+        only_binary=False, 
+        time_cutoff=None, 
+        features_to_consider="user_only", 
+        seed=64
+    ):
+        
+        self.seed = seed
         self.dataset = dataset
 
         self.dataset_dir = os.path.join(DATA_DIR, dataset)
@@ -41,7 +49,10 @@ class DatasetBuilder:
         else:
             print("No time consideration")
 
-    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio = 1):
+        print("Features that will be considered:", features_to_consider)
+        self.features_to_consider = features_to_consider
+
+    def create_dataset(self, dataset_type="graph", standardize_features=True, on_gpu=False, oversampling_ratio=1):
         """
         Args:
             dataset_type:str. Has to be "graph", "sequential" or "raw"
@@ -69,8 +80,8 @@ class DatasetBuilder:
             news_ids_to_consider = [news_id for news_id in news_ids_to_consider
                                     if labels[news_id] in ['false', 'true']]
 
-        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size=0.1, random_state=42)
-        train_ids, test_ids = train_test_split(train_ids, test_size=0.25, random_state=68)
+        train_ids, val_ids = train_test_split(news_ids_to_consider, test_size=0.1, random_state=self.seed)
+        train_ids, test_ids = train_test_split(train_ids, test_size=0.25, random_state=self.seed*7)
         print(f"Len train/val/test {len(train_ids)} {len(val_ids)} {len(test_ids)}")
 
         user_ids_in_train, tweet_ids_in_train = \
@@ -78,6 +89,9 @@ class DatasetBuilder:
 
         tweet_features = self.load_tweet_features()
         user_features = self.load_user_features()
+
+        if standardize_features:
+            print("Standardizing features")
 
         preprocessed_tweet_fts = self.preprocess_tweet_features(tweet_features, tweet_ids_in_train)
         preprocessed_user_fts = self.preprocess_user_features(user_features, user_ids_in_train, standardize_features)
@@ -100,16 +114,21 @@ class DatasetBuilder:
                                                        user_fts=preprocessed_user_fts)
                 trees.append((news_id, label, node_features, edges))
 
-        self.oversample(trees, ids_to_dataset, ratio = oversampling_ratio)
+        self.oversample(trees, ids_to_dataset, ratio=oversampling_ratio)
 
         for news_id, label, node_features, edges in trees:
 
             if dataset_type == "graph":
+                import torch_geometric
                 x = torch.tensor(node_features, dtype=torch.float32)
                 y = torch.tensor(utils.to_label(label))
                 edge_index = np.array([edge[:2] for edge in edges],
-                                        dtype=int)  # change if you want the time somewhere
+                                      dtype=int)  # change if you want the time somewhere
                 edge_index = torch.tensor(edge_index).t().contiguous()
+                if on_gpu:
+                    y.to(torch.device("cuda"))
+                    x.to(torch.device("cuda"))
+                    edge_index.to(torch.device("cuda"))
                 data_point = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
                 if on_gpu:
                     data_point.to(torch.device("cuda"))
@@ -121,14 +140,15 @@ class DatasetBuilder:
 
             elif dataset_type == "sequential":
                 y = utils.to_label(label)
-                sequential_data = np.array(node_features) # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
+                sequential_data = np.array(
+                    node_features)  # If we go for this one, returns the features of the successive new tweet-user tuples encountered over time
                 dataset[ids_to_dataset[news_id]].append([sequential_data, y])
                 # print(sequential_data.mean(dim=0))
                 # print("label was {}".format(label))
             elif dataset_type == "raw":
                 dataset[ids_to_dataset[news_id]].append(
                     [[label, news_id] + edge + list(node_features[edge[1]]) for edge in
-                        edges])  # edge = [node_index_in, node_index_out, time_cut, uid_in, uid_out]
+                     edges])  # edge = [node_index_in, node_index_out, time_out, uid_in, uid_out]
 
         print(f"Dataset loaded in {time.time() - start_time:.3f}s")
 
@@ -154,21 +174,14 @@ class DatasetBuilder:
 
         tweet_features = {}
 
+        text_embeddings = np.load("rumor_detection_acl2017/output_bert.npy")
+        
         with open(os.path.join(DATA_DIR, "tweet_features.txt")) as text_file:
             # first line contains column names
             self.tweet_feature_names = text_file.readline().rstrip('\n').split(';')
-            for line in text_file.readlines():
+            for i, line in enumerate(text_file.readlines()):
                 features = line.rstrip('\n').split(";")
-                tweet_features[int(features[0])] = {self.tweet_feature_names[i]: features[i]
-                                                    for i in range(1, len(features))}
-
-        with open(os.path.join(self.dataset_dir, "source_tweets.txt")) as text_file:
-            for line in text_file.readlines():
-                tweet_id, text = line.split("\t")
-                if tweet_id not in tweet_features.keys():
-                    tweet_features[int(tweet_id)] = {'text': text,
-                                                     'created_at': '2016-01-01 00:00:01'}
-                    # TODO: change the date according to if dataset is 2015 or 2016
+                tweet_features[int(features[0])] = {"embedding":text_embeddings[i]}
 
         return tweet_features
 
@@ -198,23 +211,20 @@ class DatasetBuilder:
 
         """
 
-        # TODO: more preprocessing, this is just a beginning.
-        if 'created_at' in self.tweet_feature_names:
-            for tweet_id in tweet_features.keys():
-                tweet_features[tweet_id]['created_at'] = \
-                    utils.from_date_text_to_timestamp(tweet_features[tweet_id]['created_at'])
-
-        # print('running tf-idf')
-        # self.text_features = preprocess_tweets(self.tweet_texts)
-        # self.n_text_features = len(list(self.text_features.values())[0])
-        # print("Tweets tf-idfed in {:3f}s".format(time.time() - start_time))
+        dict_defaults = {
+            'embed': np.zeros((768))
+        }
 
         def default_tweet_features():
-            # return np.array([utils.from_date_text_to_timestamp('2016-01-01 00:00:01')])
-            return np.array([])
+            """ Return np array of default features sorted by alphabetic order """
+            return np.array([val for key, val in
+                             sorted(dict_defaults.items(), key=lambda x: x[0])]).reshape(-1)
 
-        # new_tweet_features = {key: np.array([val['created_at']]) for key, val in tweet_features.items()}
-        new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
+        # new_tweet_features = {key: np.array([]) for key, val in tweet_features.items()}
+
+        new_tweet_features = {key: np.array([key_val[1] for key_val in sorted(value.items(), key=lambda x: x[0])]).reshape(-1) 
+                            for key, value in tweet_features.items()}
+
         return defaultdict(default_tweet_features, new_tweet_features)
 
     def preprocess_user_features(self, user_features, user_ids_in_train, standardize_features=True):
@@ -271,13 +281,13 @@ class DatasetBuilder:
             ]
             # print(features.keys())
             for int_feature in integer_features:
-                new_features[int_feature] = int(features[int_feature])
+                new_features[int_feature] = float(features[int_feature])
 
-            new_features["verified"] = int(features['verified'] == 'True')
-            new_features["geo_enabled"] = int(features['geo_enabled'] == 'True')
-            new_features['has_description'] = int(len(features['description']) > 0)
-            new_features['len_name'] = len(features['name'])
-            new_features['len_screen_name'] = len(features['screen_name'])
+            new_features["verified"] = float(features['verified'] == 'True')
+            new_features["geo_enabled"] = float(features['geo_enabled'] == 'True')
+            new_features['has_description'] = float(len(features['description']) > 0)
+            new_features['len_name'] = float(len(features['name']))
+            new_features['len_screen_name'] = float(len(features['screen_name']))
 
             user_features[user_id] = new_features
 
@@ -292,8 +302,6 @@ class DatasetBuilder:
                 "friends_count",
                 "listed_count",
                 "statuses_count",
-                "len_name",
-                "len_screen_name"
             ]:
                 scaler = StandardScaler().fit(
                     np.array([val[ft] for val in user_features_train_only.values()]).reshape(-1, 1)
@@ -301,11 +309,10 @@ class DatasetBuilder:
 
                 # faster to do this way as we don't have to convert to np arrays
                 mean, std = scaler.mean_[0], scaler.var_[0] ** (1 / 2)
-                for key in user_features_train_only.keys():
-                    user_features_train_only[key][ft] = (user_features_train_only[key][ft] - mean) / std
-
                 for key in user_features.keys():
                     user_features[key][ft] = (user_features[key][ft] - mean) / std
+
+                user_features_train_only = {key: val for key, val in user_features.items() if key in user_ids_in_train}
 
         dict_defaults = {
             'created_at': np.median([elt["created_at"] for elt in user_features_train_only.values()]),
@@ -345,7 +352,7 @@ class DatasetBuilder:
                         if "ROOT" in line:
                             continue
                         tweet_in, tweet_out, user_in, user_out, _, _ = utils.parse_edge_line(line)
-                        user_ids_in_train.add(user_in) #user_ids_in_train may be bigger
+                        user_ids_in_train.add(user_in)  # user_ids_in_train may be bigger
                         user_ids_in_train.add(user_out)
                         tweet_ids_in_train.add(tweet_in)
                         tweet_ids_in_train.add(tweet_out)
@@ -365,35 +372,28 @@ class DatasetBuilder:
             edge_index: list (nb_edges)[node_in_id, node_out_id, time_out]
         """
 
-        def agglomerate_features(node_tweet_fts, node_user_fts):
-            return np.concatenate([node_tweet_fts, node_user_fts])
-
         edges = []  #
         x = []
         node_id_to_count = {}  # Dict tweet id, user id -> node id, which starts at 0 # changed as before, a tweet can be seen a first time with a given uid then a second time with a different one
         count = 0
 
-        self.number_of_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
-        # TODO kept previous line for backward compatibility but next line has the correct name
-        self.num_node_features = len(agglomerate_features(tweet_fts[-1], user_fts[-1]))
-
         # First run to get the ROOT line and shift in time (if there is one)
-        time_shift = 0 
+        time_shift = 0
         with open(tree_file_name, "rt") as tree_file:
             for line in tree_file.readlines():
                 tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
-                if time_out < 0 and time_shift == 0: 
+                if time_out < 0 and time_shift == 0:
                     # if buggy dataset, and we haven't found the time_shift yet
                     time_shift = -time_out
                 if "ROOT" in line:
                     node_id_to_count[(tweet_out, user_out)] = 0
-                    features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
-                    x.append(features_node)
+                    self.add_node_features_to_x(x, node_id_to_count, tweet_out, user_out, 
+                                                tweet_fts, user_fts, time_out)
                     count += 1
                     break
-        
+
         if count == 0:
-            raise ValueError(f"Didn't find ROOT... File {tree_file_name} is corruped")
+            raise ValueError(f"Didn't find ROOT... File {tree_file_name} is corrupted")
 
         with open(tree_file_name, "rt") as tree_file:
 
@@ -404,7 +404,7 @@ class DatasetBuilder:
                     continue
 
                 tweet_in, tweet_out, user_in, user_out, _, time_out = utils.parse_edge_line(line)
-                time_out += time_shift #fix buggy dataset
+                time_out += time_shift  # fix buggy dataset
                 assert time_out >= 0
 
                 if (self.time_cut is None) or (time_out <= self.time_cut):
@@ -412,24 +412,43 @@ class DatasetBuilder:
                     # Add dest if unseen. First line with ROOT adds the original tweet.
                     if (tweet_out, user_out) not in node_id_to_count:
                         node_id_to_count[(tweet_out, user_out)] = count
-                        features_node = agglomerate_features(tweet_fts[tweet_out], user_fts[user_out])
-                        x.append(features_node)
+                        self.add_node_features_to_x(x, node_id_to_count, tweet_out, user_out, 
+                                                    tweet_fts, user_fts, time_out)
                         count += 1
 
                     # Remove some buggy lines (i.e. duplicated or make no sense)
-                    potential_edge = [
-                        node_id_to_count[(tweet_in, user_in)],
-                        node_id_to_count[(tweet_out, user_out)],
-                        time_out,
-                        user_in,
-                        user_out
-                    ]
-                    if time_out >= current_time_out and potential_edge not in edges:
-                        current_time_out = time_out
-                        edges.append(potential_edge)
+                    if time_out >= current_time_out:
+                        potential_edge = [
+                            node_id_to_count[(tweet_in, user_in)],
+                            node_id_to_count[(tweet_out, user_out)],
+                            time_out,
+                            user_in,
+                            user_out
+                        ]
+                        if potential_edge not in edges:
+                            current_time_out = time_out
+                            edges.append(potential_edge)
+
+                if (self.time_cut is not None) and (time_out > self.time_cut):
+                    # We've seen all interesting edges
+                    break
+
+        self.num_node_features = len(x[-1])
 
         return x, edges
 
+    def add_node_features_to_x(self, x, node_id_to_count, tweet_out, user_out, tweet_fts, user_fts, time_out):
+        if self.features_to_consider == "all":
+            features_node = np.concatenate([
+                tweet_fts[tweet_out], 
+                user_fts[user_out],
+                np.array([time_out])
+            ])
+        elif self.features_to_consider == "text_only":
+            features_node = tweet_fts[tweet_out]
+        else:
+            features_node = user_fts[user_out]
+        x.append(features_node)
 
     def oversample(self, trees, ids_to_dataset, ratio=1):
         """ Creates and adds new samples to trees.
@@ -459,8 +478,8 @@ class DatasetBuilder:
 
         print("Oversampling...")
 
-        initial_nb_train_examples = sum([1 if val == 'train' else 0 
-                                        for val in ids_to_dataset.values()])
+        initial_nb_train_examples = sum([1 if val == 'train' else 0
+                                         for val in ids_to_dataset.values()])
         current_nb_train_examples = initial_nb_train_examples
         random.seed(a=64)
 
@@ -469,31 +488,31 @@ class DatasetBuilder:
         while current_nb_train_examples / initial_nb_train_examples < ratio:
 
             # Pick a tree in train set
-            tree_number = random.randint(0, len(trees)-1)
+            tree_number = random.randint(0, len(trees) - 1)
             news_id, label, node_features, edges = trees[tree_number]
-            if ids_to_dataset[news_id]!='train' or len(edges) < 50:
+            if ids_to_dataset[news_id] != 'train' or len(edges) < 50:
                 continue
 
             # Modify it -> cut a part of it
             r = random.random()
-            while r<0.8:
+            while r < 0.8:
                 r = random.random()
-            new_edges = edges[:int(r*len(edges))]
+            new_edges = edges[:int(r * len(edges))]
 
             last_node = max([e[0] for e in new_edges] + [e[1] for e in new_edges])
-            new_node_features = node_features[:(last_node+1)]
+            new_node_features = node_features[:(last_node + 1)]
 
             # Slightly change the features
             for node_ft_array in new_node_features:
                 for i in range(len(node_ft_array)):
-                    if node_ft_array[i] > 10: #basically, if it is not a categorical variable
+                    if node_ft_array[i] > 10:  # basically, if it is not a categorical variable
                         random_value = random.random()
                         node_ft_array[i] += (random_value - 0.5) * 2 * (node_ft_array[i] / 50)
 
             # Add the modified version to the existing trees
             # The new id will be current_nb_train_examples+1000
-            trees.append((current_nb_train_examples+1000, label, new_node_features, new_edges))
-            ids_to_dataset[current_nb_train_examples+1000] = 'train'
+            trees.append((current_nb_train_examples + 1000, label, new_node_features, new_edges))
+            ids_to_dataset[current_nb_train_examples + 1000] = 'train'
             current_nb_train_examples += 1
 
         print(f"After oversampling: {len(trees)} trees, {current_nb_train_examples} train trees")
@@ -501,7 +520,7 @@ class DatasetBuilder:
 
 if __name__ == "__main__":
     data_builder = DatasetBuilder("twitter15", time_cutoff=None, only_binary=False)
-    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=False)
+    dataset = data_builder.create_dataset(dataset_type="graph", standardize_features=True)
 
     # data_builder = DatasetBuilder("twitter15", time_cutoff=2000)
     # dataset = data_builder.create_dataset(dataset_type="sequential", standardize_features=False)
